@@ -49,6 +49,21 @@ interface FileItem {
   file?: File;
 }
 
+// 分组文件项
+interface GroupFileItem {
+  id: string;
+  originalName: string;
+  companyName: string;
+  file: File;
+}
+
+// 公司分组信息
+interface CompanyGroup {
+  companyName: string;
+  files: GroupFileItem[];
+  folderName: string;
+}
+
 // 批量重命名规则
 interface BatchRenameRule {
   prefix: string;
@@ -70,6 +85,12 @@ const batchRenameRule = ref<BatchRenameRule>({
   sequenceStart: 1,
   sequencePadding: 2
 });
+
+// 分组功能相关的响应式数据
+const groupFileList = ref<GroupFileItem[]>([]);
+const isGroupExtracting = ref(false);
+const groupZipFile = ref<File | null>(null);
+const companyGroups = ref<CompanyGroup[]>([]);
 
 // 计算属性：检测重复文件名
 const duplicateFileNames = computed(() => {
@@ -115,6 +136,73 @@ const extractCompanyName = (filename: string): string => {
     return parts[2]; // 第三个下划线分隔的部分
   }
   return "";
+};
+
+// 从文件名提取公司名称（用于分组功能）
+const extractCompanyNameForGroup = (filename: string): string => {
+  const parts = filename.split("_");
+  if (parts.length >= 1) {
+    return parts[0]; // 第一个下划线之前的部分
+  }
+  return "";
+};
+
+// 标准化公司名称（处理特殊字符）
+const normalizeCompanyName = (companyName: string): string => {
+  return companyName
+    .replace(/（/g, "(")
+    .replace(/）/g, ")")
+    .replace(/【/g, "[")
+    .replace(/】/g, "]")
+    .trim();
+};
+
+// 清理文件夹名称中的非法字符
+const sanitizeFolderName = (folderName: string): string => {
+  return folderName.replace(/[<>:"/\\|?*]/g, "_");
+};
+
+// 格式化金额显示
+const formatAmount = (amount: string): string => {
+  if (!amount || amount === "0") return "0";
+
+  // 如果金额包含小数点
+  if (amount.includes(".")) {
+    const parts = amount.split(".");
+    const integerPart = parts[0];
+    const decimalPart = parts[1] || "";
+
+    // 检查小数部分是否全为0
+    if (decimalPart && Number(decimalPart) > 0) {
+      // 有有效小数位，保留所有小数位
+      return amount;
+    } else {
+      // 小数部分全为0，只返回整数部分
+      return integerPart;
+    }
+  }
+
+  // 没有小数点，直接返回
+  return amount;
+};
+
+// 获取上一个月份的中文显示
+const getPreviousMonthText = (): string => {
+  const now = new Date();
+  const currentMonth = now.getMonth(); // 0-11，0表示1月，11表示12月
+
+  // 计算上一个月的月份数字（1-12）
+  let previousMonthNumber: number;
+  if (currentMonth === 0) {
+    // 如果当前是1月（getMonth()=0），上一个月是12月
+    previousMonthNumber = 12;
+  } else {
+    // 其他情况，上一个月就是当前月份数字（getMonth()+1-1 = getMonth()）
+    // 例如：当前9月(getMonth()=8)，上一个月是8月
+    previousMonthNumber = currentMonth;
+  }
+
+  return `${previousMonthNumber}月`;
 };
 
 // 从PDF内容确定费用类型
@@ -327,12 +415,15 @@ const processPdfFile = async (fileItem: FileItem): Promise<void> => {
 
     fileItem.companyName = companyName;
     fileItem.expenseType = expenseType;
-    fileItem.amount = amount;
+
+    // 使用格式化函数处理金额显示
+    const formattedAmount = formatAmount(amount);
+    fileItem.amount = formattedAmount;
     fileItem.progress = 90;
 
-    // 生成新文件名
+    // 生成新文件名，使用格式化后的金额
     const newFileName = sanitizeFileName(
-      `${companyName}_${expenseType}_${amount}.pdf`
+      `${companyName}_${expenseType}${formattedAmount}.pdf`
     );
     fileItem.newName = newFileName;
     fileItem.progress = 100;
@@ -560,6 +651,9 @@ const downloadRenamedZip = async () => {
     // 将所有文件添加到ZIP中
     for (const fileItem of fileList.value) {
       if (fileItem.file && fileItem.newName) {
+        if (!fileItem.newName.includes(".pdf")) {
+          fileItem.newName = fileItem.newName + ".pdf";
+        }
         zip.file(fileItem.newName, fileItem.file);
       }
     }
@@ -577,6 +671,185 @@ const downloadRenamedZip = async () => {
     console.error("打包下载失败:", error);
     ElMessage.error("文件打包失败");
   }
+};
+
+// ========== 分组功能相关函数 ==========
+
+// 处理分组ZIP文件解压
+const extractGroupZipFile = async (
+  zipFileData: File
+): Promise<GroupFileItem[]> => {
+  try {
+    isGroupExtracting.value = true;
+    const zip = new JSZip();
+    const zipContent = await zip.loadAsync(zipFileData);
+    const extractedFiles: GroupFileItem[] = [];
+
+    // 遍历ZIP文件中的所有文件
+    for (const [filename, zipEntry] of Object.entries(zipContent.files)) {
+      // 跳过文件夹
+      if (zipEntry.dir) continue;
+
+      // 只处理PDF文件
+      if (!filename.toLowerCase().endsWith(".pdf")) {
+        console.log(`跳过非PDF文件: ${filename}`);
+        continue;
+      }
+
+      try {
+        // 获取文件内容
+        const fileData = await zipEntry.async("blob");
+        const file = new File([fileData], filename, {
+          type: "application/pdf"
+        });
+
+        // 验证是否为有效的PDF文件
+        if (isPdfFile(file)) {
+          const companyName = extractCompanyNameForGroup(filename);
+          const fileItem: GroupFileItem = {
+            id:
+              Date.now().toString() +
+              Math.random().toString(36).substring(2, 11),
+            originalName: filename,
+            companyName: normalizeCompanyName(companyName),
+            file: file
+          };
+          extractedFiles.push(fileItem);
+        }
+      } catch (error) {
+        console.error(`处理文件 ${filename} 时出错:`, error);
+      }
+    }
+
+    return extractedFiles;
+  } catch (error) {
+    console.error("解压ZIP文件失败:", error);
+    throw new Error("ZIP文件解压失败");
+  } finally {
+    isGroupExtracting.value = false;
+  }
+};
+
+// 分组文件上传前的检查
+const beforeGroupUpload: UploadProps["beforeUpload"] = file => {
+  const isZip =
+    file.type === "application/zip" ||
+    file.type === "application/x-zip-compressed" ||
+    file.name.toLowerCase().endsWith(".zip");
+  const isLt50M = file.size / 1024 / 1024 < 50;
+
+  if (!isZip) {
+    ElMessage.error("只能上传ZIP压缩包!");
+    return false;
+  }
+  if (!isLt50M) {
+    ElMessage.error("文件大小不能超过50MB!");
+    return false;
+  }
+  return true;
+};
+
+// 分组文件选择处理
+const handleGroupFileChange: UploadProps["onChange"] = async uploadFile => {
+  if (uploadFile.raw) {
+    const file = uploadFile.raw;
+
+    try {
+      groupZipFile.value = file;
+      ElMessage.info("正在解压ZIP文件，请稍候...");
+      const extractedFiles = await extractGroupZipFile(file);
+
+      if (extractedFiles.length === 0) {
+        ElMessage.warning("ZIP文件中没有找到PDF文件");
+        return;
+      }
+
+      groupFileList.value = extractedFiles;
+      generateCompanyGroups();
+      ElMessage.success(
+        `成功从ZIP文件中提取了 ${extractedFiles.length} 个PDF文件`
+      );
+    } catch (error) {
+      ElMessage.error(
+        "ZIP文件处理失败: " +
+          (error instanceof Error ? error.message : "未知错误")
+      );
+    }
+  }
+};
+
+// 生成公司分组
+const generateCompanyGroups = () => {
+  const groupMap = new Map<string, GroupFileItem[]>();
+
+  // 按公司名称分组
+  groupFileList.value.forEach(file => {
+    const companyName = file.companyName || "未知公司";
+    if (!groupMap.has(companyName)) {
+      groupMap.set(companyName, []);
+    }
+    groupMap.get(companyName)!.push(file);
+  });
+  const fileTime = new Date().toLocaleString();
+  // 生成分组信息
+  const previousMonth = getPreviousMonthText();
+  companyGroups.value = Array.from(groupMap.entries()).map(
+    ([companyName, files]) => ({
+      companyName,
+      files,
+      folderName: sanitizeFolderName(`${companyName}${previousMonth}发票`)
+    })
+  );
+};
+
+// 按公司分组下载ZIP文件
+const downloadGroupedZip = async () => {
+  if (companyGroups.value.length === 0) {
+    ElMessage.error("没有文件可以下载");
+    return;
+  }
+
+  try {
+    ElMessage.info("正在按公司分组打包文件，请稍候...");
+    const zip = new JSZip();
+
+    // 按公司分组处理文件
+    for (const group of companyGroups.value) {
+      if (group.files.length >= 2) {
+        // 有2个或以上文件的公司，创建文件夹
+        const folder = zip.folder(group.folderName);
+        if (folder) {
+          for (const file of group.files) {
+            folder.file(file.originalName, file.file);
+          }
+        }
+      } else if (group.files.length === 1) {
+        // 只有1个文件的公司，直接放在根目录
+        const file = group.files[0];
+        zip.file(file.originalName, file.file);
+      }
+    }
+
+    // 生成ZIP文件
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+
+    // 下载文件
+    const originalZipName = `发票${getPreviousMonthText()}.zip`;
+    // const newZipName = originalZipName.replace(/\.zip$/i, "_grouped.zip");
+    saveAs(zipBlob, originalZipName);
+
+    ElMessage.success("按公司分组打包下载成功");
+  } catch (error) {
+    console.error("分组打包下载失败:", error);
+    ElMessage.error("分组打包失败");
+  }
+};
+
+// 清空分组文件
+const clearGroupFiles = () => {
+  groupFileList.value = [];
+  companyGroups.value = [];
+  groupZipFile.value = null;
 };
 
 // 获取状态标签类型
@@ -717,7 +990,7 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
 
           <el-table-column prop="amount" label="金额" width="100">
             <template #default="{ row }">
-              <span v-if="row.amount">{{ row.amount }}</span>
+              <span v-if="row.amount">{{ formatAmount(row.amount) }}</span>
               <span v-else class="text-gray-400">-</span>
             </template>
           </el-table-column>
@@ -807,6 +1080,118 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
         </el-table>
       </div>
     </el-card>
+
+    <!-- 分组功能区域 -->
+    <el-card class="mb-6">
+      <template #header>
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-bold">PDF按公司分组打包工具</h2>
+          <div class="space-x-2">
+            <el-button
+              type="success"
+              :icon="Download"
+              @click="downloadGroupedZip"
+              :disabled="companyGroups.length === 0"
+            >
+              按公司分组下载
+            </el-button>
+            <el-button
+              type="danger"
+              :icon="Delete"
+              @click="clearGroupFiles"
+              :disabled="groupFileList.length === 0"
+            >
+              清空列表
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <div class="upload-section mb-6">
+        <el-upload
+          class="upload-demo"
+          drag
+          :auto-upload="false"
+          :before-upload="beforeGroupUpload"
+          :on-change="handleGroupFileChange"
+          :show-file-list="false"
+          accept=".zip"
+        >
+          <div class="upload-content text-center py-4">
+            <el-icon class="el-icon--upload text-2xl mb-2">
+              <FolderOpened v-if="isGroupExtracting" />
+              <Upload v-else />
+            </el-icon>
+            <div class="el-upload__text text-base">
+              <span v-if="isGroupExtracting">正在解压ZIP文件...</span>
+              <span v-else
+                >将包含PDF文件的ZIP压缩包拖拽到此处，或<em
+                  >点击选择文件</em
+                ></span
+              >
+            </div>
+            <div class="el-upload__tip text-xs text-gray-500 mt-1">
+              支持上传ZIP压缩包，将按公司名称自动分组，文件大小不超过50MB
+            </div>
+          </div>
+        </el-upload>
+      </div>
+
+      <!-- 公司分组列表 -->
+      <div class="group-list-section" v-if="companyGroups.length > 0">
+        <h3 class="text-lg font-semibold mb-4">
+          公司分组列表 ({{ companyGroups.length }} 个公司，共
+          {{ groupFileList.length }} 个文件)
+        </h3>
+
+        <div class="space-y-4">
+          <el-card
+            v-for="group in companyGroups"
+            :key="group.companyName"
+            class="group-card"
+            shadow="hover"
+          >
+            <template #header>
+              <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                  <el-tag
+                    :type="group.files.length >= 2 ? 'success' : 'info'"
+                    size="small"
+                  >
+                    {{ group.files.length >= 2 ? "创建文件夹" : "根目录" }}
+                  </el-tag>
+                  <span class="font-medium">{{ group.companyName }}</span>
+                  <span class="text-gray-500"
+                    >({{ group.files.length }} 个文件)</span
+                  >
+                </div>
+                <div
+                  v-if="group.files.length >= 2"
+                  class="text-sm text-gray-600"
+                >
+                  文件夹：{{ group.folderName }}
+                </div>
+              </div>
+            </template>
+
+            <div class="file-list">
+              <div
+                v-for="file in group.files"
+                :key="file.id"
+                class="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0"
+              >
+                <div class="flex items-center space-x-2">
+                  <el-icon class="text-red-500">
+                    <DocumentCopy />
+                  </el-icon>
+                  <span class="text-sm">{{ file.originalName }}</span>
+                </div>
+              </div>
+            </div>
+          </el-card>
+        </div>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -876,5 +1261,28 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
 .duplicate-filename-input :deep(.el-input__wrapper.is-focus) {
   border-color: #ef4444;
   box-shadow: 0 0 0 1px #ef4444 inset;
+}
+
+/* 分组功能样式 */
+.group-card {
+  margin-bottom: 1rem;
+}
+
+.group-card :deep(.el-card__header) {
+  padding: 12px 16px;
+  background-color: #f8f9fa;
+}
+
+.group-card :deep(.el-card__body) {
+  padding: 12px 16px;
+}
+
+.file-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.space-y-4 > * + * {
+  margin-top: 1rem;
 }
 </style>
