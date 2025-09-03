@@ -667,18 +667,18 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
           :show-file-list="false"
           accept=".pdf,.zip"
         >
-          <div class="upload-content text-center py-8">
-            <el-icon class="el-icon--upload text-4xl mb-4">
+          <div class="upload-content text-center py-4">
+            <el-icon class="el-icon--upload text-2xl mb-2">
               <FolderOpened v-if="isExtracting" />
               <Upload v-else />
             </el-icon>
-            <div class="el-upload__text text-lg">
+            <div class="el-upload__text text-base">
               <span v-if="isExtracting">正在解压ZIP文件...</span>
               <span v-else
                 >将ZIP压缩包或PDF文件拖拽到此处，或<em>点击选择文件</em></span
               >
             </div>
-            <div class="el-upload__tip text-sm text-gray-500 mt-2">
+            <div class="el-upload__tip text-xs text-gray-500 mt-1">
               支持上传ZIP压缩包（包含多个PDF）或单个PDF文件，文件大小不超过50MB
             </div>
           </div>
@@ -752,7 +752,7 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
             <template #default="{ row }">
               <div class="flex items-center gap-2">
                 <el-input
-                  v-model="row.newName"
+                  v-model="row.newName.split('.pdf')[0]"
                   placeholder="输入新文件名（不含扩展名）"
                   clearable
                   :class="{
@@ -761,7 +761,7 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
                   @input="
                     (value: string) => {
                       if (value && !value.endsWith('.pdf')) {
-                        row.newName = sanitizeFileName(value + '.pdf');
+                        row.newName = sanitizeFileName(value);
                       }
                     }
                   "
@@ -831,7 +831,7 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
 }
 
 .upload-content {
-  padding: 2rem;
+  padding: 1rem;
 }
 
 .truncate {
