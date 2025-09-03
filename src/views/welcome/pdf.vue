@@ -21,7 +21,11 @@ import {
   Delete,
   FolderOpened,
   DocumentCopy,
-  Warning
+  Warning,
+  Edit,
+  Check,
+  Close,
+  Refresh
 } from "@element-plus/icons-vue";
 import type { UploadProps } from "element-plus";
 import * as pdfjsLib from "pdfjs-dist";
@@ -92,6 +96,10 @@ const isGroupExtracting = ref(false);
 const groupZipFile = ref<File | null>(null);
 const companyGroups = ref<CompanyGroup[]>([]);
 
+// 文件夹名称编辑状态管理
+const editingFolderNames = ref<Map<string, boolean>>(new Map());
+const tempFolderNames = ref<Map<string, string>>(new Map());
+
 // 计算属性：检测重复文件名
 const duplicateFileNames = computed(() => {
   const nameCount = new Map<string, number>();
@@ -126,6 +134,13 @@ const expenseTypeRules = [
   { keywords: ["代订火车票"], type: "火车费" },
   { keywords: ["代订退票费"], type: "退票费" },
   { keywords: ["代订机票"], type: "机票费" },
+  { keywords: ["代订机票款"], type: "机票费" },
+  { keywords: ["代订机票费"], type: "机票费" },
+  { keywords: ["代订服务费"], type: "服务费" },
+  { keywords: ["代订接车费"], type: "接车费" },
+  { keywords: ["代订签证费"], type: "签证费" },
+  { keywords: ["代订住宿费"], type: "住宿费" },
+  { keywords: ["代订酒店费"], type: "酒店费" },
   { keywords: ["服务费"], type: "服务费" }
 ];
 
@@ -212,7 +227,7 @@ const determineExpenseType = (pdfText: string): string => {
       return rule.type;
     }
   }
-  return "机票费"; // 默认类型
+  return "未命名"; // 默认类型
 };
 
 // 从PDF内容提取金额
@@ -850,6 +865,85 @@ const clearGroupFiles = () => {
   groupFileList.value = [];
   companyGroups.value = [];
   groupZipFile.value = null;
+  editingFolderNames.value.clear();
+  tempFolderNames.value.clear();
+};
+
+// ========== 文件夹名称编辑功能 ==========
+
+// 开始编辑文件夹名称
+const startEditFolderName = (
+  companyName: string,
+  currentFolderName: string
+) => {
+  editingFolderNames.value.set(companyName, true);
+  tempFolderNames.value.set(companyName, currentFolderName);
+};
+
+// 取消编辑文件夹名称
+const cancelEditFolderName = (companyName: string) => {
+  editingFolderNames.value.set(companyName, false);
+  tempFolderNames.value.delete(companyName);
+};
+
+// 保存文件夹名称
+const saveFolderName = (companyName: string) => {
+  const newFolderName = tempFolderNames.value.get(companyName);
+  if (!newFolderName || !newFolderName.trim()) {
+    ElMessage.error("文件夹名称不能为空");
+    return;
+  }
+
+  // 清理文件名中的非法字符
+  const sanitizedName = sanitizeFolderName(newFolderName.trim());
+
+  // 检查是否有重复的文件夹名称
+  const isDuplicate = companyGroups.value.some(
+    group =>
+      group.companyName !== companyName && group.folderName === sanitizedName
+  );
+
+  if (isDuplicate) {
+    ElMessage.error("文件夹名称重复，请使用其他名称");
+    return;
+  }
+
+  // 更新对应公司分组的文件夹名称
+  const groupIndex = companyGroups.value.findIndex(
+    group => group.companyName === companyName
+  );
+  if (groupIndex !== -1) {
+    companyGroups.value[groupIndex].folderName = sanitizedName;
+    editingFolderNames.value.set(companyName, false);
+    tempFolderNames.value.delete(companyName);
+    ElMessage.success("文件夹名称已更新");
+  }
+};
+
+// 重置为默认文件夹名称
+const resetToDefaultFolderName = (companyName: string) => {
+  const previousMonth = getPreviousMonthText();
+  const defaultFolderName = sanitizeFolderName(
+    `${companyName}${previousMonth}发票`
+  );
+
+  const groupIndex = companyGroups.value.findIndex(
+    group => group.companyName === companyName
+  );
+  if (groupIndex !== -1) {
+    companyGroups.value[groupIndex].folderName = defaultFolderName;
+    ElMessage.success("已恢复为默认文件夹名称");
+  }
+};
+
+// 检查是否正在编辑
+const isEditingFolder = (companyName: string): boolean => {
+  return editingFolderNames.value.get(companyName) || false;
+};
+
+// 获取临时文件夹名称
+const getTempFolderName = (companyName: string): string => {
+  return tempFolderNames.value.get(companyName) || "";
 };
 
 // 获取状态标签类型
@@ -1167,9 +1261,67 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
                 </div>
                 <div
                   v-if="group.files.length >= 2"
-                  class="text-sm text-gray-600"
+                  class="flex items-center space-x-2"
                 >
-                  文件夹：{{ group.folderName }}
+                  <!-- 非编辑状态 -->
+                  <div
+                    v-if="!isEditingFolder(group.companyName)"
+                    class="flex items-center space-x-2"
+                  >
+                    <span class="text-sm text-gray-600"
+                      >文件夹：{{ group.folderName }}</span
+                    >
+                    <el-button
+                      type="text"
+                      size="small"
+                      :icon="Edit"
+                      @click="
+                        startEditFolderName(group.companyName, group.folderName)
+                      "
+                      class="text-blue-500 hover:text-blue-700"
+                      title="编辑文件夹名称"
+                    />
+                    <el-button
+                      type="text"
+                      size="small"
+                      :icon="Refresh"
+                      @click="resetToDefaultFolderName(group.companyName)"
+                      class="text-green-500 hover:text-green-700"
+                      title="恢复默认名称"
+                    />
+                  </div>
+
+                  <!-- 编辑状态 -->
+                  <div v-else class="flex items-center space-x-2">
+                    <span class="text-sm text-gray-600">文件夹：</span>
+                    <el-input
+                      :model-value="getTempFolderName(group.companyName)"
+                      @update:model-value="
+                        value => tempFolderNames.set(group.companyName, value)
+                      "
+                      size="small"
+                      class="w-48"
+                      placeholder="输入文件夹名称"
+                      @keyup.enter="saveFolderName(group.companyName)"
+                      @keyup.esc="cancelEditFolderName(group.companyName)"
+                    />
+                    <el-button
+                      type="text"
+                      size="small"
+                      :icon="Check"
+                      @click="saveFolderName(group.companyName)"
+                      class="text-green-500 hover:text-green-700"
+                      title="保存"
+                    />
+                    <el-button
+                      type="text"
+                      size="small"
+                      :icon="Close"
+                      @click="cancelEditFolderName(group.companyName)"
+                      class="text-red-500 hover:text-red-700"
+                      title="取消"
+                    />
+                  </div>
                 </div>
               </div>
             </template>
@@ -1284,5 +1436,23 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
 
 .space-y-4 > * + * {
   margin-top: 1rem;
+}
+
+/* 文件夹名称编辑功能样式 */
+.group-card .el-button--text {
+  padding: 2px 4px;
+  min-height: auto;
+}
+
+.group-card .el-button--text:hover {
+  background-color: transparent;
+}
+
+.group-card .el-input--small {
+  font-size: 12px;
+}
+
+.group-card .el-input--small .el-input__wrapper {
+  padding: 2px 8px;
 }
 </style>
