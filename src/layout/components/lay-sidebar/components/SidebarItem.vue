@@ -90,7 +90,8 @@ const onlyOneChild: menuType = ref(null);
 function hasOneShowingChild(children: menuType[] = [], parent: menuType) {
   const showingChildren = children.filter((item: any) => {
     onlyOneChild.value = item;
-    return true;
+    // 过滤掉 showLink 为 false 的菜单项
+    return item.meta?.showLink !== false;
   });
 
   if (showingChildren[0]?.meta?.showParent) {
@@ -121,6 +122,7 @@ function resolvePath(routePath) {
 <template>
   <SidebarLinkItem
     v-if="
+      item.meta?.showLink !== false &&
       hasOneShowingChild(item.children, item) &&
       (!onlyOneChild.children || onlyOneChild.noShowingChildren)
     "
@@ -180,7 +182,7 @@ function resolvePath(routePath) {
     </el-menu-item>
   </SidebarLinkItem>
   <el-sub-menu
-    v-else
+    v-else-if="item.meta?.showLink !== false"
     ref="subMenu"
     teleported
     :index="resolvePath(item.path)"

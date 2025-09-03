@@ -5,7 +5,7 @@ export default {
     icon: "ri/information-line",
     // showLink: false,
     title: "异常页面",
-    rank: 9
+    rank: 0
   },
   children: [
     {
@@ -15,22 +15,6 @@ export default {
       meta: {
         title: "403"
       }
-    },
-    {
-      path: "/error/404",
-      name: "404",
-      component: () => import("@/views/error/404.vue"),
-      meta: {
-        title: "404"
-      }
-    },
-    {
-      path: "/error/500",
-      name: "500",
-      component: () => import("@/views/error/500.vue"),
-      meta: {
-        title: "500"
-      }
     }
   ]
-} satisfies RouteConfigsTable;
+} satisfies RouteConfigsTable
