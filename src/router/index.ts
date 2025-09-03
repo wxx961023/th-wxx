@@ -34,21 +34,21 @@ const homeRoute: RouteRecordRaw = {
   ]
 }
 
-/** 发票路由 */
+/** PDF批量重命名路由 */
 const pdfRoute: RouteRecordRaw = {
   path: "/pdf",
   name: "PdfModule",
   component: () => import("@/layout/index.vue"),
-  redirect: "/pdf/index",
+  redirect: "/pdf/batch-rename",
   meta: {
     icon: "ep:document",
-    title: "发票",
+    title: "PDF工具",
     rank: 1
   },
   children: [
     {
-      path: "/pdf/index",
-      name: "PdfIndex",
+      path: "/pdf/batch-rename",
+      name: "PdfBatchRename",
       component: () => import("@/views/welcome/pdf.vue"),
       meta: {
         title: "发票"
