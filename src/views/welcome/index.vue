@@ -8,7 +8,7 @@ defineOptions({
   <div class="error-403-container">
     <iframe
       ref="batchDownloadIframe"
-      src="../../../public/batch_download.html"
+      src="../../../batch_download.html"
       class="batch-download-iframe"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
       title="批量账单下载工具"
