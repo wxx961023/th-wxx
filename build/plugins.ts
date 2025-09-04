@@ -1,23 +1,24 @@
-import { cdn } from "./cdn";
-import vue from "@vitejs/plugin-vue";
-import { viteBuildInfo } from "./info";
-import svgLoader from "vite-svg-loader";
-import Icons from "unplugin-icons/vite";
-import type { PluginOption } from "vite";
-import vueJsx from "@vitejs/plugin-vue-jsx";
-import tailwindcss from "@tailwindcss/vite";
-import { configCompressPlugin } from "./compress";
-import removeNoMatch from "vite-plugin-router-warn";
-import { visualizer } from "rollup-plugin-visualizer";
-import removeConsole from "vite-plugin-remove-console";
-import { codeInspectorPlugin } from "code-inspector-plugin";
-import { vitePluginFakeServer } from "vite-plugin-fake-server";
+import { cdn } from "./cdn"
+import vue from "@vitejs/plugin-vue"
+import { viteBuildInfo } from "./info"
+import svgLoader from "vite-svg-loader"
+import Icons from "unplugin-icons/vite"
+import type { PluginOption } from "vite"
+import vueJsx from "@vitejs/plugin-vue-jsx"
+import tailwindcss from "@tailwindcss/vite"
+import { configCompressPlugin } from "./compress"
+import removeNoMatch from "vite-plugin-router-warn"
+import { visualizer } from "rollup-plugin-visualizer"
+import removeConsole from "vite-plugin-remove-console"
+import { codeInspectorPlugin } from "code-inspector-plugin"
+import { vitePluginFakeServer } from "vite-plugin-fake-server"
+import { viteStaticCopy } from "vite-plugin-static-copy"
 
 export function getPluginsList(
   VITE_CDN: boolean,
   VITE_COMPRESSION: ViteCompression
 ): PluginOption[] {
-  const lifecycle = process.env.npm_lifecycle_event;
+  const lifecycle = process.env.npm_lifecycle_event
   return [
     tailwindcss(),
     vue(),
@@ -54,6 +55,15 @@ export function getPluginsList(
       compiler: "vue3",
       scale: 1
     }),
+    // 静态文件复制插件 - 复制wxx文件夹到dist目录
+    viteStaticCopy({
+      targets: [
+        {
+          src: "wxx",
+          dest: ""
+        }
+      ]
+    }),
     VITE_CDN ? cdn : null,
     configCompressPlugin(VITE_COMPRESSION),
     // 线上环境删除console
@@ -62,5 +72,5 @@ export function getPluginsList(
     lifecycle === "report"
       ? visualizer({ open: true, brotliSize: true, filename: "report.html" })
       : (null as any)
-  ];
+  ]
 }

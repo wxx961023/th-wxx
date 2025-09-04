@@ -59,8 +59,12 @@ export default ({ mode }: ConfigEnv): UserConfigExport => {
           entryFileNames: "static/js/[name]-[hash].js",
           assetFileNames: "static/[ext]/[name]-[hash].[ext]"
         }
-      }
+      },
+      // 复制额外的静态资源
+      copyPublicDir: true
     },
+    // 指定额外的静态资源目录
+    publicDir: "public",
     define: {
       __INTLIFY_PROD_DEVTOOLS__: false,
       __APP_INFO__: JSON.stringify(__APP_INFO__)
