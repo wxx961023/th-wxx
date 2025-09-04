@@ -25,7 +25,8 @@ import {
   Edit,
   Check,
   Close,
-  Refresh
+  Refresh,
+  View
 } from "@element-plus/icons-vue";
 import type { UploadProps } from "element-plus";
 import * as pdfjsLib from "pdfjs-dist";
@@ -946,6 +947,53 @@ const getTempFolderName = (companyName: string): string => {
   return tempFolderNames.value.get(companyName) || "";
 };
 
+// ========== PDF预览功能 ==========
+
+// 预览PDF文件
+const previewPdfFile = (fileItem: FileItem) => {
+  if (!fileItem.file) {
+    ElMessage.error("文件不存在，无法预览");
+    return;
+  }
+
+  try {
+    // 创建临时URL
+    const fileUrl = URL.createObjectURL(fileItem.file);
+
+    // 在新窗口中打开PDF预览
+    const previewWindow = window.open(
+      fileUrl,
+      "_blank",
+      "width=1000,height=800,scrollbars=yes,resizable=yes"
+    );
+
+    if (!previewWindow) {
+      ElMessage.error("无法打开预览窗口，请检查浏览器弹窗设置");
+      URL.revokeObjectURL(fileUrl);
+      return;
+    }
+
+    // 监听窗口关闭事件，释放内存资源
+    const checkClosed = setInterval(() => {
+      if (previewWindow.closed) {
+        URL.revokeObjectURL(fileUrl);
+        clearInterval(checkClosed);
+      }
+    }, 1000);
+
+    // 设置超时释放资源（防止内存泄漏）
+    setTimeout(() => {
+      if (!previewWindow.closed) {
+        URL.revokeObjectURL(fileUrl);
+      }
+      clearInterval(checkClosed);
+    }, 300000); // 5分钟后自动释放
+  } catch (error) {
+    console.error("PDF预览失败:", error);
+    ElMessage.error("PDF文件预览失败，文件可能已损坏");
+  }
+};
+
 // 获取状态标签类型
 const getStatusTagType = (status: string) => {
   switch (status) {
@@ -1069,8 +1117,24 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
         >
           <el-table-column prop="originalName" label="原文件名" min-width="200">
             <template #default="{ row }">
-              <div class="truncate" :title="row.originalName">
-                {{ row.originalName }}
+              <div class="flex items-center space-x-2">
+                <el-button
+                  type="text"
+                  class="pdf-preview-link p-0 text-left"
+                  @click="previewPdfFile(row)"
+                  :title="`点击预览: ${row.originalName}`"
+                >
+                  <div class="flex items-center space-x-1">
+                    <el-icon class="text-blue-500">
+                      <View />
+                    </el-icon>
+                    <span
+                      class="truncate text-blue-600 hover:text-blue-800 underline"
+                    >
+                      {{ row.originalName }}
+                    </span>
+                  </div>
+                </el-button>
               </div>
             </template>
           </el-table-column>
@@ -1454,5 +1518,25 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
 
 .group-card .el-input--small .el-input__wrapper {
   padding: 2px 8px;
+}
+
+/* PDF预览功能样式 */
+.pdf-preview-link {
+  max-width: 100%;
+  justify-content: flex-start !important;
+  text-align: left !important;
+}
+
+.pdf-preview-link:hover {
+  background-color: transparent !important;
+}
+
+.pdf-preview-link .truncate {
+  max-width: 160px;
+  display: inline-block;
+}
+
+.pdf-preview-link:hover .truncate {
+  color: #1d4ed8 !important;
 }
 </style>
