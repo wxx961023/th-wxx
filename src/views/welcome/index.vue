@@ -10,7 +10,7 @@ defineOptions({
       ref="batchDownloadIframe"
       src="../../../public/batch_download.html"
       class="batch-download-iframe"
-      sandbox="allow-scripts allow-forms allow-popups allow-downloads"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
       title="批量账单下载工具"
     />
   </div>
