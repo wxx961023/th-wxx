@@ -1,5 +1,11 @@
 {
   "buildCommand": "npm run build:staging",
   "outputDirectory": "dist",
-  "framework": "vite"
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/((?!static|favicon.ico|batch_download.html|download_config.json|logo.svg|pdf.worker.min.mjs|platform-config.json).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
