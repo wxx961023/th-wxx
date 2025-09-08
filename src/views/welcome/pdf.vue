@@ -223,11 +223,68 @@ const getPreviousMonthText = (): string => {
 
 // 从PDF内容确定费用类型
 const determineExpenseType = (pdfText: string): string => {
+  console.log("从PDF内容确定费用类型: ", pdfText);
+
+  // 清理文本：去除多余空格、换行符等
+  const cleanText = pdfText
+    .replace(/\s+/g, " ") // 将多个空格替换为单个空格
+    .replace(/\n/g, " ") // 将换行符替换为空格
+    .trim();
+
+  // 创建无空格版本用于精确匹配
+  const noSpaceText = cleanText.replace(/\s/g, "");
+
+  console.log("清理后的文本:", cleanText);
+  console.log("无空格文本:", noSpaceText);
+
   for (const rule of expenseTypeRules) {
-    if (rule.keywords.some(keyword => pdfText.includes(keyword))) {
+    // 策略1: 直接匹配（原有逻辑）
+    if (rule.keywords.some(keyword => cleanText.includes(keyword))) {
+      console.log(
+        `匹配成功 - 直接匹配: ${rule.type}, 关键词: ${rule.keywords.find(k => cleanText.includes(k))}`
+      );
+      return rule.type;
+    }
+
+    // 策略2: 无空格匹配（处理空格分割问题）
+    if (
+      rule.keywords.some(keyword => {
+        const noSpaceKeyword = keyword.replace(/\s/g, "");
+        return noSpaceText.includes(noSpaceKeyword);
+      })
+    ) {
+      const matchedKeyword = rule.keywords.find(keyword => {
+        const noSpaceKeyword = keyword.replace(/\s/g, "");
+        return noSpaceText.includes(noSpaceKeyword);
+      });
+      console.log(
+        `匹配成功 - 无空格匹配: ${rule.type}, 关键词: ${matchedKeyword}`
+      );
+      return rule.type;
+    }
+
+    // 策略3: 模糊匹配（允许关键词字符间有空格）
+    if (
+      rule.keywords.some(keyword => {
+        // 将关键词转换为正则表达式，允许字符间有空格
+        const fuzzyPattern = keyword.split("").join("\\s*");
+        const regex = new RegExp(fuzzyPattern, "i");
+        return regex.test(cleanText);
+      })
+    ) {
+      const matchedKeyword = rule.keywords.find(keyword => {
+        const fuzzyPattern = keyword.split("").join("\\s*");
+        const regex = new RegExp(fuzzyPattern, "i");
+        return regex.test(cleanText);
+      });
+      console.log(
+        `匹配成功 - 模糊匹配: ${rule.type}, 关键词: ${matchedKeyword}`
+      );
       return rule.type;
     }
   }
+
+  console.log("未找到匹配的费用类型，返回默认值");
   return "未命名"; // 默认类型
 };
 
