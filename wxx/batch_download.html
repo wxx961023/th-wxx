@@ -1069,6 +1069,21 @@
               >
                 打包下载差旅管家账单(ZIP)
               </button>
+              <label
+                style="
+                  margin-left: 20px;
+                  display: flex;
+                  align-items: center;
+                  gap: 5px;
+                "
+              >
+                <input
+                  type="checkbox"
+                  id="removeZeroRecords"
+                  onchange="toggleRemoveZeroRecords()"
+                />
+                <span>移除零记录</span>
+              </label>
             </div>
           </div>
 
@@ -5938,8 +5953,11 @@
 
           addLog(`开始下载账单: ${customerName} (待还金额: ¥${debt})`, "info");
 
+          const removeZeroRecords =
+            document.getElementById("removeZeroRecords").checked;
+
           const response = await fetch(
-            `https://staff-api-gateway.teyixing.com/admin/v1/finance/downloadCorpBill?billId=${billId}`,
+            `https://staff-api-gateway.teyixing.com/admin/v1/finance/downloadCorpBill?billId=${billId}&removeZeroRecords=${removeZeroRecords}`,
             {
               method: "POST",
               headers: {
@@ -6056,8 +6074,11 @@
             // 创建新的AbortController用于取消请求
             downloadAbortController = new AbortController();
 
+            const removeZeroRecords =
+              document.getElementById("removeZeroRecords").checked;
+
             const response = await fetch(
-              `https://staff-api-gateway.teyixing.com/admin/v1/finance/downloadCorpBill?billId=${record.billId}`,
+              `https://staff-api-gateway.teyixing.com/admin/v1/finance/downloadCorpBill?billId=${record.billId}&removeZeroRecords=${removeZeroRecords}`,
               {
                 method: "POST",
                 headers: {
@@ -6274,8 +6295,7 @@
                 record.customerName,
                 record.billStartDate,
                 record.billEndDate
-              ) +
-              ".xlsx";
+              ) + ".xlsx";
 
             // 添加文件到ZIP包
             zip.file(fileName, blob);
@@ -6395,7 +6415,9 @@
           addLog(`开始下载 ID: ${billId}`, "info");
 
           const useProxy = document.getElementById("useProxy").checked;
-          let apiUrl = `https://staff-api-gateway.teyixing.com/admin/v1/finance/downloadCorpBill?billId=${billId}`;
+          const removeZeroRecords =
+            document.getElementById("removeZeroRecords").checked;
+          let apiUrl = `https://staff-api-gateway.teyixing.com/admin/v1/finance/downloadCorpBill?billId=${billId}&removeZeroRecords=${removeZeroRecords}`;
 
           // 如果使用代理，添加代理前缀
           if (useProxy) {
