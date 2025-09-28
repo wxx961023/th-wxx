@@ -1190,6 +1190,7 @@ const mergePdfs = async () => {
     ElMessage.success(
       `PDF合并完成，共合并了 ${mergeFileList.value.length} 个文件`
     );
+    // clearMergeFiles();
   } catch (error) {
     console.error("PDF合并失败:", error);
     ElMessage.error("PDF合并失败，请检查文件是否损坏");
@@ -1661,7 +1662,7 @@ const mergePdfs = async () => {
             </template>
           </el-table-column>
 
-          <el-table-column prop="order" label="顺序" width="100">
+          <el-table-column prop="order" label="顺序" width="250">
             <template #default="{ row, $index }">
               <div class="flex items-center space-x-2">
                 <el-button
@@ -1702,8 +1703,8 @@ const mergePdfs = async () => {
         <div class="mt-4 p-4 bg-blue-50 rounded-lg">
           <h4 class="font-medium text-blue-900 mb-2">合并设置</h4>
           <div class="space-y-2">
-            <div class="flex items-center space-x-4">
-              <span class="text-sm text-blue-700">合并后的文件名：</span>
+            <div class="flex items-center space-x-6">
+              <span class="text-m text-blue-700 w-38">合并后的文件名：</span>
               <el-input
                 v-model="mergedFileName"
                 placeholder="merged_document.pdf"

@@ -54,14 +54,7 @@ const pdfRoute: RouteRecordRaw = {
         title: "发票"
       }
     },
-    {
-      path: "/pdf/merge",
-      name: "PdfMerge",
-      component: () => import("@/views/welcome/pdf.vue"),
-      meta: {
-        title: "PDF合并"
-      }
-    }
+    
   ]
 }
 
