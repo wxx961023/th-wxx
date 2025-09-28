@@ -66,6 +66,7 @@
     "mitt": "^3.0.1",
     "nprogress": "^0.2.0",
     "path-browserify": "^1.0.1",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.4.149",
     "pinia": "^3.0.3",
     "pinyin-pro": "^3.26.0",

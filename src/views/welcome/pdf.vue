@@ -32,6 +32,7 @@ import type { UploadProps } from "element-plus";
 import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
+import { PDFDocument } from "pdf-lib";
 
 // 设置PDF.js的worker路径，使用本地worker文件
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -100,6 +101,11 @@ const companyGroups = ref<CompanyGroup[]>([]);
 // 文件夹名称编辑状态管理
 const editingFolderNames = ref<Map<string, boolean>>(new Map());
 const tempFolderNames = ref<Map<string, string>>(new Map());
+
+// PDF合并功能相关变量
+const mergeFileList = ref<File[]>([]);
+const isMerging = ref(false);
+const mergedFileName = ref("merged_document");
 
 // 计算属性：检测重复文件名
 const duplicateFileNames = computed(() => {
@@ -1088,6 +1094,109 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
   }
   return "";
 };
+
+// ========== PDF合并功能相关函数 ==========
+
+// 合并文件上传前的检查
+const beforeMergeUpload: UploadProps["beforeUpload"] = file => {
+  const isPdf = file.type === "application/pdf";
+  const isLt50M = file.size / 1024 / 1024 < 50;
+
+  if (!isPdf) {
+    ElMessage.error("只能上传PDF文件!");
+    return false;
+  }
+  if (!isLt50M) {
+    ElMessage.error("文件大小不能超过50MB!");
+    return false;
+  }
+  return true;
+};
+
+// 合并文件选择处理
+const handleMergeFileChange: UploadProps["onChange"] = uploadFile => {
+  if (uploadFile.raw) {
+    const file = uploadFile.raw;
+    mergeFileList.value.push(file);
+    ElMessage.success(`已添加文件: ${file.name}`);
+  }
+};
+
+// 上移文件
+const moveFileUp = (index: number) => {
+  if (index > 0) {
+    const [movedFile] = mergeFileList.value.splice(index, 1);
+    mergeFileList.value.splice(index - 1, 0, movedFile);
+  }
+};
+
+// 下移文件
+const moveFileDown = (index: number) => {
+  if (index < mergeFileList.value.length - 1) {
+    const [movedFile] = mergeFileList.value.splice(index, 1);
+    mergeFileList.value.splice(index + 1, 0, movedFile);
+  }
+};
+
+// 删除合并文件
+const removeMergeFile = (index: number) => {
+  mergeFileList.value.splice(index, 1);
+};
+
+// 清空合并文件列表
+const clearMergeFiles = () => {
+  mergeFileList.value = [];
+  mergedFileName.value = "merged_document";
+};
+
+// 合并PDF文件
+const mergePdfs = async () => {
+  if (mergeFileList.value.length < 2) {
+    ElMessage.warning("至少需要2个PDF文件才能合并");
+    return;
+  }
+
+  isMerging.value = true;
+  try {
+    ElMessage.info("正在合并PDF文件，请稍候...");
+
+    // 创建一个新的PDF文档
+    const mergedPdf = await PDFDocument.create();
+
+    // 按顺序处理每个PDF文件
+    for (let i = 0; i < mergeFileList.value.length; i++) {
+      const file = mergeFileList.value[i];
+      const fileBytes = await file.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(fileBytes);
+
+      // 复制所有页面到合并的PDF中
+      const pages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+      pages.forEach(page => mergedPdf.addPage(page));
+    }
+
+    // 保存合并后的PDF
+    const mergedPdfBytes = await mergedPdf.save();
+    const arrayBuffer = mergedPdfBytes.buffer;
+    const mergedPdfBlob = new Blob([arrayBuffer], { type: "application/pdf" });
+
+    // 生成下载文件名
+    const downloadFileName = mergedFileName.value.endsWith(".pdf")
+      ? mergedFileName.value
+      : `${mergedFileName.value}.pdf`;
+
+    // 下载合并后的文件
+    saveAs(mergedPdfBlob, downloadFileName);
+
+    ElMessage.success(
+      `PDF合并完成，共合并了 ${mergeFileList.value.length} 个文件`
+    );
+  } catch (error) {
+    console.error("PDF合并失败:", error);
+    ElMessage.error("PDF合并失败，请检查文件是否损坏");
+  } finally {
+    isMerging.value = false;
+  }
+};
 </script>
 
 <template>
@@ -1462,6 +1571,151 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
               </div>
             </div>
           </el-card>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- PDF合并功能区域 -->
+    <el-card class="mb-6">
+      <template #header>
+        <div class="flex justify-between items-center">
+          <h2 class="text-xl font-bold">PDF合并工具</h2>
+          <div class="space-x-2">
+            <el-button
+              type="primary"
+              :icon="Upload"
+              @click="mergePdfs"
+              :loading="isMerging"
+              :disabled="mergeFileList.length < 2"
+            >
+              {{ isMerging ? "合并中..." : "合并PDF" }}
+            </el-button>
+            <el-button
+              type="danger"
+              :icon="Delete"
+              @click="clearMergeFiles"
+              :disabled="mergeFileList.length === 0"
+            >
+              清空列表
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <div class="upload-section mb-6">
+        <el-upload
+          class="upload-demo"
+          drag
+          multiple
+          :auto-upload="false"
+          :before-upload="beforeMergeUpload"
+          :on-change="handleMergeFileChange"
+          :show-file-list="false"
+          accept=".pdf"
+        >
+          <div class="upload-content text-center py-4">
+            <el-icon class="el-icon--upload text-2xl mb-2">
+              <Upload />
+            </el-icon>
+            <div class="el-upload__text text-base">
+              将多个PDF文件拖拽到此处，或<em>点击选择文件</em>
+            </div>
+            <div class="el-upload__tip text-xs text-gray-500 mt-1">
+              支持上传多个PDF文件进行合并，文件大小不超过50MB
+            </div>
+          </div>
+        </el-upload>
+      </div>
+
+      <div class="merge-file-list-section" v-if="mergeFileList.length > 0">
+        <h3 class="text-lg font-semibold mb-4">
+          合并文件列表 ({{ mergeFileList.length }})
+          <el-tag
+            v-if="mergeFileList.length >= 2"
+            type="success"
+            size="small"
+            class="ml-2"
+          >
+            可以合并
+          </el-tag>
+          <el-tag v-else type="warning" size="small" class="ml-2">
+            至少需要2个文件
+          </el-tag>
+        </h3>
+
+        <el-table :data="mergeFileList" style="width: 100%" stripe>
+          <el-table-column prop="name" label="文件名" min-width="300">
+            <template #default="{ row }">
+              <div class="flex items-center space-x-2">
+                <el-icon class="text-red-500">
+                  <DocumentCopy />
+                </el-icon>
+                <span class="truncate">{{ row.name }}</span>
+              </div>
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="size" label="文件大小" width="100">
+            <template #default="{ row }">
+              {{ (row.size / 1024 / 1024).toFixed(2) }} MB
+            </template>
+          </el-table-column>
+
+          <el-table-column prop="order" label="顺序" width="100">
+            <template #default="{ row, $index }">
+              <div class="flex items-center space-x-2">
+                <el-button
+                  type="text"
+                  size="small"
+                  :disabled="$index === 0"
+                  @click="moveFileUp($index)"
+                  :icon="Upload"
+                  title="上移"
+                />
+                <span class="text-sm">{{ $index + 1 }}</span>
+                <el-button
+                  type="text"
+                  size="small"
+                  :disabled="$index === mergeFileList.length - 1"
+                  @click="moveFileDown($index)"
+                  :icon="Download"
+                  title="下移"
+                />
+              </div>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="操作" width="100" fixed="right">
+            <template #default="{ row, $index }">
+              <el-button
+                type="danger"
+                size="small"
+                :icon="Delete"
+                @click="removeMergeFile($index)"
+              >
+                删除
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="mt-4 p-4 bg-blue-50 rounded-lg">
+          <h4 class="font-medium text-blue-900 mb-2">合并设置</h4>
+          <div class="space-y-2">
+            <div class="flex items-center space-x-4">
+              <span class="text-sm text-blue-700">合并后的文件名：</span>
+              <el-input
+                v-model="mergedFileName"
+                placeholder="merged_document.pdf"
+                class="w-64"
+                size="small"
+              >
+                <template #suffix>
+                  <span class="text-gray-400">.pdf</span>
+                </template>
+              </el-input>
+            </div>
+          </div>
         </div>
       </div>
     </el-card>
