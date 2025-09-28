@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue";
 import {
   ElMessage,
   ElUpload,
@@ -26,13 +26,15 @@ import {
   Check,
   Close,
   Refresh,
-  View
+  View,
+  Rank
 } from "@element-plus/icons-vue";
 import type { UploadProps } from "element-plus";
 import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 import { PDFDocument } from "pdf-lib";
+import Sortable from "sortablejs";
 
 // 设置PDF.js的worker路径，使用本地worker文件
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -106,6 +108,8 @@ const tempFolderNames = ref<Map<string, string>>(new Map());
 const mergeFileList = ref<File[]>([]);
 const isMerging = ref(false);
 const mergedFileName = ref("merged_document");
+const mergeTableRef = ref<HTMLElement | null>(null);
+let sortableInstance: Sortable | null = null;
 
 // 计算属性：检测重复文件名
 const duplicateFileNames = computed(() => {
@@ -1095,6 +1099,73 @@ const getRowClassName = ({ row }: { row: FileItem }) => {
   return "";
 };
 
+// ========== 拖拽排序功能 ==========
+
+// 初始化拖拽排序
+const initDragSort = () => {
+  nextTick(() => {
+    // 等待DOM完全渲染
+    setTimeout(() => {
+      // 尝试多种方式获取表格tbody元素
+      let tbody = null;
+
+      // 方式1：通过ref获取（如果ref是DOM元素）
+      if (mergeTableRef.value && typeof mergeTableRef.value.querySelector === 'function') {
+        tbody = mergeTableRef.value.querySelector('.el-table__body-wrapper tbody');
+      }
+
+      // 方式2：直接通过类名查找
+      if (!tbody) {
+        tbody = document.querySelector('.merge-file-list-section .el-table__body-wrapper tbody');
+      }
+
+      // 方式3：通过data-ref或其他属性查找
+      if (!tbody) {
+        const tables = document.querySelectorAll('.merge-file-list-section .el-table');
+        tables.forEach(table => {
+          const foundTbody = table.querySelector('.el-table__body-wrapper tbody');
+          if (foundTbody) {
+            tbody = foundTbody;
+          }
+        });
+      }
+
+      if (tbody) {
+        console.log('找到tbody元素，初始化拖拽排序');
+
+        // 销毁之前的实例
+        if (sortableInstance) {
+          sortableInstance.destroy();
+          sortableInstance = null;
+        }
+
+        sortableInstance = Sortable.create(tbody as HTMLElement, {
+          animation: 150,
+          ghostClass: 'sortable-ghost',
+          chosenClass: 'sortable-chosen',
+          dragClass: 'sortable-drag',
+          handle: '.cursor-move, .el-icon', // 限制只能在图标区域拖拽
+          onEnd: (evt) => {
+            const oldIndex = evt.oldIndex as number;
+            const newIndex = evt.newIndex as number;
+
+            if (oldIndex !== newIndex && oldIndex !== undefined && newIndex !== undefined) {
+              // 更新数组顺序
+              const [movedItem] = mergeFileList.value.splice(oldIndex, 1);
+              mergeFileList.value.splice(newIndex, 0, movedItem);
+
+              ElMessage.success(`文件已移动到第 ${newIndex + 1} 位`);
+              console.log(`文件从第 ${oldIndex + 1} 位移动到第 ${newIndex + 1} 位`);
+            }
+          }
+        });
+      } else {
+        console.warn('未找到可拖拽的表格tbody元素');
+      }
+    }, 100); // 增加延迟确保DOM渲染完成
+  });
+};
+
 // ========== PDF合并功能相关函数 ==========
 
 // 合并文件上传前的检查
@@ -1149,6 +1220,23 @@ const clearMergeFiles = () => {
   mergedFileName.value = "merged_document";
 };
 
+// 生命周期钩子
+onMounted(() => {
+  // 监听文件列表变化，重新初始化拖拽排序
+  const unwatch = watch(mergeFileList, () => {
+    initDragSort();
+  }, { deep: true });
+
+  // 清理函数
+  onUnmounted(() => {
+    unwatch();
+    if (sortableInstance) {
+      sortableInstance.destroy();
+      sortableInstance = null;
+    }
+  });
+});
+
 // 合并PDF文件
 const mergePdfs = async () => {
   if (mergeFileList.value.length < 2) {
@@ -1176,8 +1264,7 @@ const mergePdfs = async () => {
 
     // 保存合并后的PDF
     const mergedPdfBytes = await mergedPdf.save();
-    const arrayBuffer = mergedPdfBytes.buffer;
-    const mergedPdfBlob = new Blob([arrayBuffer], { type: "application/pdf" });
+    const mergedPdfBlob = new Blob([mergedPdfBytes as BlobPart], { type: "application/pdf" });
 
     // 生成下载文件名
     const downloadFileName = mergedFileName.value.endsWith(".pdf")
@@ -1628,7 +1715,7 @@ const mergePdfs = async () => {
         </el-upload>
       </div>
 
-      <div class="merge-file-list-section" v-if="mergeFileList.length > 0">
+      <div class="merge-file-list-section" v-if="mergeFileList.length > 0" ref="mergeTableRef">
         <h3 class="text-lg font-semibold mb-4">
           合并文件列表 ({{ mergeFileList.length }})
           <el-tag
@@ -1644,7 +1731,12 @@ const mergePdfs = async () => {
           </el-tag>
         </h3>
 
-        <el-table :data="mergeFileList" style="width: 100%" stripe>
+        <el-table
+          :data="mergeFileList"
+          style="width: 100%"
+          stripe
+          row-key="name"
+        >
           <el-table-column prop="name" label="文件名" min-width="300">
             <template #default="{ row }">
               <div class="flex items-center space-x-2">
@@ -1662,26 +1754,14 @@ const mergePdfs = async () => {
             </template>
           </el-table-column>
 
-          <el-table-column prop="order" label="顺序" width="250">
+          <el-table-column prop="order" label="顺序" width="200">
             <template #default="{ row, $index }">
               <div class="flex items-center space-x-2">
-                <el-button
-                  type="text"
-                  size="small"
-                  :disabled="$index === 0"
-                  @click="moveFileUp($index)"
-                  :icon="Upload"
-                  title="上移"
-                />
-                <span class="text-sm">{{ $index + 1 }}</span>
-                <el-button
-                  type="text"
-                  size="small"
-                  :disabled="$index === mergeFileList.length - 1"
-                  @click="moveFileDown($index)"
-                  :icon="Download"
-                  title="下移"
-                />
+                <el-icon class="text-gray-400 cursor-move">
+                  <Rank />
+                </el-icon>
+                <span class="text-sm font-medium">{{ $index + 1 }}</span>
+                <el-tag type="info" size="small">拖拽排序</el-tag>
               </div>
             </template>
           </el-table-column>
@@ -1850,5 +1930,39 @@ const mergePdfs = async () => {
 
 .pdf-preview-link:hover .truncate {
   color: #1d4ed8 !important;
+}
+
+/* 拖拽排序样式 */
+.sortable-ghost {
+  opacity: 0.4;
+  background-color: #f3f4f6 !important;
+}
+
+.sortable-chosen {
+  background-color: #e5e7eb !important;
+}
+
+.sortable-drag {
+  opacity: 0.8;
+  background-color: #d1d5db !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.cursor-move {
+  cursor: move;
+}
+
+/* 表格行拖拽时的样式 */
+.el-table__row.sortable-ghost td {
+  background-color: #f3f4f6 !important;
+  border-color: #e5e7eb !important;
+}
+
+.el-table__row.sortable-chosen td {
+  background-color: #e5e7eb !important;
+}
+
+.el-table__row.sortable-drag td {
+  background-color: #d1d5db !important;
 }
 </style>
