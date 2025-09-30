@@ -12,10 +12,14 @@ defineOptions({
 
 const uploadedFile = ref<File | null>(null);
 const excelData = ref<any[]>([]);
+const allSheetData = ref<Record<string, any[]>>({}); // 存储所有工作表数据
 const originalWorkbook = ref<any>(null);
 const loading = ref(false);
 const showData = ref(false);
 const generating = ref(false);
+const editableFileNames = ref<
+  { groupName: string; fileName: string; sheetType?: string }[]
+>([]);
 
 const handleFileChange = (uploadFile: any) => {
   const file = uploadFile.raw;
@@ -37,12 +41,32 @@ const readFile = (file: File) => {
       workbook.xlsx
         .load(buffer)
         .then(() => {
-          // 查找名为 '酒店明细(国内)' 的工作表
-          const targetSheetName = "酒店明细(国内)";
-          const worksheet = workbook.getWorksheet(targetSheetName);
+          // 处理多个工作表
+          const sheetProcessors = [
+            {
+              name: "酒店明细(国内)",
+              key: "hotel",
+              departmentKeyword: "入住人部门"
+            },
+            {
+              name: "火车票明细",
+              key: "train",
+              departmentKeyword: "乘车人部门"
+            }
+          ];
 
-          if (!worksheet) {
-            ElMessage.error(`未找到工作表 "${targetSheetName}"`);
+          const sheetData: Record<string, any[]> = {};
+          let processedSheets = 0;
+          let totalSheets = 0;
+
+          // 计算需要处理的工作表数量
+          sheetProcessors.forEach(processor => {
+            const worksheet = workbook.getWorksheet(processor.name);
+            if (worksheet) totalSheets++;
+          });
+
+          if (totalSheets === 0) {
+            ElMessage.error("未找到任何需要处理的工作表");
             console.log(
               "可用的工作表:",
               workbook.worksheets.map(ws => ws.name)
@@ -50,21 +74,6 @@ const readFile = (file: File) => {
             loading.value = false;
             return;
           }
-
-          // 读取数据为二维数组
-          const jsonData: any[][] = [];
-          worksheet.eachRow((row, rowNumber) => {
-            const rowData: any[] = [];
-            row.eachCell((cell, colNumber) => {
-              rowData.push(cell.value);
-            });
-            jsonData.push(rowData);
-          });
-
-          excelData.value = jsonData;
-          originalWorkbook.value = workbook; // 保存原始工作簿
-          showData.value = true;
-          loading.value = false;
 
           // 打印Excel文件信息
           console.log("Excel文件信息:");
@@ -75,105 +84,155 @@ const readFile = (file: File) => {
             "所有工作表名称:",
             workbook.worksheets.map(ws => ws.name)
           );
-          console.log("当前读取工作表:", targetSheetName);
-          console.log("数据行数:", jsonData.length);
-          console.log("数据列数:", (jsonData[0] as any[])?.length || 0);
-          console.log("工作表内容:", jsonData);
+          console.log(`找到 ${totalSheets} 个需要处理的工作表`);
 
-          // 查找"入住人部门"所在的列
-          if (jsonData.length > 2) {
-            const headers = jsonData[0] as any[];
-            const thirdRow = jsonData[2] as any[];
+          // 处理每个工作表
+          sheetProcessors.forEach(processor => {
+            const worksheet = workbook.getWorksheet(processor.name);
+            if (!worksheet) {
+              console.log(`跳过不存在的工作表: ${processor.name}`);
+              return;
+            }
 
-            // 在第三行中查找包含"入住人部门"的单元格
-            const departmentColumnIndex = thirdRow.findIndex(
-              (cell: any) => cell && cell.toString().includes("入住人部门")
+            console.log(
+              `\n========== 处理工作表: ${processor.name} ==========`
             );
 
-            if (departmentColumnIndex !== -1) {
-              const departmentColumnName =
-                headers[departmentColumnIndex] ||
-                `第${departmentColumnIndex + 1}列`;
-              const departmentData = jsonData.map((row, index) => ({
-                行号: index + 1, // Excel行号（从1开始）
-                入住人部门: row[departmentColumnIndex]
-              }));
+            // 读取数据为二维数组
+            const jsonData: any[][] = [];
+            worksheet.eachRow((row, rowNumber) => {
+              const rowData: any[] = [];
+              row.eachCell((cell, colNumber) => {
+                rowData.push(cell.value);
+              });
+              jsonData.push(rowData);
+            });
 
-              console.log(`\n========== "入住人部门"列信息 ==========`);
-              console.log(
-                `找到"入住人部门"单元格位置: 第3行，第${departmentColumnIndex + 1}列`
-              );
-              console.log(`对应表头列名: ${departmentColumnName}`);
-              console.log(`该列完整数据:`, departmentData);
+            sheetData[processor.key] = jsonData;
 
-              // 过滤掉空值，只显示有数据的行
-              const validDepartmentData = departmentData.filter(
-                item =>
-                  item.入住人部门 && item.入住人部门.toString().trim() !== ""
-              );
-              console.log(
-                `\n有效数据（共${validDepartmentData.length}条）:`,
-                validDepartmentData
-              );
+            console.log(`${processor.name} - 数据行数:`, jsonData.length);
+            console.log(
+              `${processor.name} - 数据列数:`,
+              (jsonData[0] as any[])?.length || 0
+            );
 
-              // 对行数大于等于4的有效数据进行分组处理
-              const validDataFromRow4 = validDepartmentData.filter(
-                item => item.行号 >= 4
+            // 查找部门列
+            if (jsonData.length > 2) {
+              const headers = jsonData[0] as any[];
+              const thirdRow = jsonData[2] as any[];
+
+              // 在第三行中查找包含部门关键字的单元格
+              const departmentColumnIndex = thirdRow.findIndex(
+                (cell: any) =>
+                  cell && cell.toString().includes(processor.departmentKeyword)
               );
 
-              if (validDataFromRow4.length > 0) {
+              if (departmentColumnIndex !== -1) {
+                const departmentColumnName =
+                  headers[departmentColumnIndex] ||
+                  `第${departmentColumnIndex + 1}列`;
+                const departmentData = jsonData.map((row, index) => ({
+                  行号: index + 1,
+                  [processor.departmentKeyword]: row[departmentColumnIndex]
+                }));
+
                 console.log(
-                  `\n========== 分组处理结果（第4行起数据） ==========`
+                  `\n========== "${processor.departmentKeyword}"列信息 ==========`
+                );
+                console.log(
+                  `找到"${processor.departmentKeyword}"单元格位置: 第3行，第${departmentColumnIndex + 1}列`
+                );
+                console.log(`对应表头列名: ${departmentColumnName}`);
+                console.log(`该列完整数据:`, departmentData);
+
+                // 过滤掉空值，只显示有数据的行
+                const validDepartmentData = departmentData.filter(
+                  item =>
+                    item[processor.departmentKeyword] &&
+                    item[processor.departmentKeyword].toString().trim() !== ""
+                );
+                console.log(
+                  `\n有效数据（共${validDepartmentData.length}条）:`,
+                  validDepartmentData
                 );
 
-                // 分组处理
-                const groups = new Map<string, typeof validDataFromRow4>();
+                // 对行数大于等于4的有效数据进行分组处理
+                const validDataFromRow4 = validDepartmentData.filter(
+                  item => item.行号 >= 4
+                );
 
-                validDataFromRow4.forEach(item => {
-                  const department = item.入住人部门.toString();
-                  const firstPart = department.split("-")[0]; // 通过'-'拆分，取第一个部分
+                if (validDataFromRow4.length > 0) {
+                  console.log(
+                    `\n========== 分组处理结果（第4行起数据） ==========`
+                  );
 
-                  if (!groups.has(firstPart)) {
-                    groups.set(firstPart, []);
-                  }
-                  groups.get(firstPart)!.push(item);
-                });
+                  // 分组处理
+                  const groups = new Map<string, typeof validDataFromRow4>();
 
-                // 打印分组结果
-                console.log(`共分为 ${groups.size} 组:`);
+                  validDataFromRow4.forEach(item => {
+                    const department =
+                      item[processor.departmentKeyword].toString();
+                    const firstPart = department.split("-")[0];
 
-                groups.forEach((groupItems, groupName) => {
-                  console.log(`\n--- 组名: ${groupName} ---`);
-                  console.log(`包含数据条数: ${groupItems.length}`);
-                  console.log(`具体数据:`);
-                  groupItems.forEach(item => {
-                    console.log(`  行${item.行号}: ${item.入住人部门}`);
+                    if (!groups.has(firstPart)) {
+                      groups.set(firstPart, []);
+                    }
+                    groups.get(firstPart)!.push(item);
                   });
-                });
 
-                // 生成分组统计
-                console.log(`\n========== 分组统计 ==========`);
-                const groupStats = Array.from(groups.entries()).map(
-                  ([name, items]) => ({
-                    组名: name,
-                    数据条数: items.length,
-                    行号范围: `${Math.min(...items.map(i => i.行号))}-${Math.max(...items.map(i => i.行号))}`
-                  })
-                );
-                console.log("分组统计表:", groupStats);
+                  // 打印分组结果
+                  console.log(`${processor.name} - 共分为 ${groups.size} 组:`);
+
+                  groups.forEach((groupItems, groupName) => {
+                    console.log(`\n--- 组名: ${groupName} ---`);
+                    console.log(`包含数据条数: ${groupItems.length}`);
+                    console.log(`具体数据:`);
+                    groupItems.forEach(item => {
+                      console.log(
+                        `  行${item.行号}: ${item[processor.departmentKeyword]}`
+                      );
+                    });
+                  });
+
+                  // 生成分组统计
+                  console.log(`\n========== 分组统计 ==========`);
+                  const groupStats = Array.from(groups.entries()).map(
+                    ([name, items]) => ({
+                      组名: name,
+                      数据条数: items.length,
+                      行号范围: `${Math.min(...items.map(i => i.行号))}-${Math.max(...items.map(i => i.行号))}`
+                    })
+                  );
+                  console.log(`${processor.name} - 分组统计表:`, groupStats);
+                } else {
+                  console.log(
+                    `\n${processor.name} - 没有第4行及以后的有效数据进行分组处理`
+                  );
+                }
               } else {
-                console.log("\n没有第4行及以后的有效数据进行分组处理");
+                console.log(`${processor.name} - 第三行数据:`, thirdRow);
+                console.log(`${processor.name} - 所有表头:`, headers);
+                console.warn(
+                  `在第三行中未找到'${processor.departmentKeyword}'单元格`
+                );
               }
-            } else {
-              console.log("第三行数据:", thirdRow);
-              console.log("所有表头:", headers);
-              throw new Error("在第三行中未找到'入住人部门'单元格");
             }
-          }
 
-          ElMessage.success(
-            `成功读取工作表 "${targetSheetName}"！请在控制台查看详细信息`
-          );
+            processedSheets++;
+
+            // 当所有工作表都处理完成后显示结果
+            if (processedSheets === totalSheets) {
+              allSheetData.value = sheetData;
+              excelData.value = sheetData.hotel || []; // 优先显示酒店数据
+              originalWorkbook.value = workbook;
+              showData.value = true;
+              loading.value = false;
+
+              ElMessage.success(
+                `成功读取 ${totalSheets} 个工作表！请在控制台查看详细信息`
+              );
+            }
+          });
         })
         .catch(error => {
           console.error("读取Excel文件失败:", error);
@@ -218,9 +277,306 @@ const beforeUpload = (file: File) => {
   return true;
 };
 
+// 获取分组信息
+const getGroupInfo = () => {
+  const allGroupInfo: any[] = [];
+
+  // 处理酒店数据
+  if (allSheetData.value.hotel && allSheetData.value.hotel.length > 0) {
+    const hotelGroups = processSheetData(
+      allSheetData.value.hotel,
+      "酒店明细(国内)",
+      "入住人部门",
+      "hotel"
+    );
+    allGroupInfo.push(...hotelGroups);
+  }
+
+  // 处理火车票数据
+  if (allSheetData.value.train && allSheetData.value.train.length > 0) {
+    const trainGroups = processSheetData(
+      allSheetData.value.train,
+      "火车票明细",
+      "乘车人部门",
+      "train"
+    );
+    allGroupInfo.push(...trainGroups);
+  }
+
+  return allGroupInfo;
+};
+
+// 处理单个工作表数据
+const processSheetData = (
+  sheetData: any[][],
+  sheetName: string,
+  departmentKeyword: string,
+  sheetType: string
+) => {
+  if (!sheetData || sheetData.length === 0) {
+    return [];
+  }
+
+  // 重新计算分组数据
+  const departmentColumnIndex = (sheetData[2] as any[]).findIndex(
+    (cell: any) => cell && cell.toString().includes(departmentKeyword)
+  );
+
+  if (departmentColumnIndex === -1) {
+    console.warn(`在${sheetName}中未找到${departmentKeyword}列`);
+    return [];
+  }
+
+  const validDataFromRow4 = sheetData
+    .slice(3)
+    .filter((row: any[], index: number) => {
+      return (
+        row[departmentColumnIndex] &&
+        row[departmentColumnIndex].toString().trim() !== ""
+      );
+    })
+    .map((row: any[], index: number) => ({
+      行号: index + 4,
+      [departmentKeyword]: row[departmentColumnIndex],
+      完整行数据: row
+    }));
+
+  // 分组处理
+  const groups = new Map<string, typeof validDataFromRow4>();
+  validDataFromRow4.forEach(item => {
+    const department = item[departmentKeyword].toString();
+    const firstPart = department.split("-")[0];
+    if (!groups.has(firstPart)) {
+      groups.set(firstPart, []);
+    }
+    groups.get(firstPart)!.push(item);
+  });
+
+  // 返回分组信息
+  const groupInfo = Array.from(groups.entries()).map(([name, items]) => {
+    // 查找是否已有该分组的编辑文件名（区分工作表类型）
+    const existing = editableFileNames.value.find(
+      item => item.groupName === name && item.sheetType === sheetType
+    );
+    return {
+      groupName: name,
+      sheetName: sheetName,
+      sheetType: sheetType,
+      count: items.length,
+      rowRange: `${Math.min(...items.map(i => i.行号))}-${Math.max(...items.map(i => i.行号))}`,
+      fileName: `${name}.xlsx`,
+      editableFileName: existing ? existing.fileName : name // 使用已保存的文件名或默认名称
+    };
+  });
+
+  // 如果有新的分组，添加到editableFileNames中
+  groupInfo.forEach(item => {
+    const exists = editableFileNames.value.find(
+      f => f.groupName === item.groupName && f.sheetType === item.sheetType
+    );
+    if (!exists) {
+      editableFileNames.value.push({
+        groupName: item.groupName,
+        fileName: item.editableFileName,
+        sheetType: item.sheetType
+      });
+    }
+  });
+
+  return groupInfo;
+};
+
+// 获取分组数量
+const getGroupCount = () => {
+  return getGroupInfo().length;
+};
+
+// 更新文件名
+const updateFileName = (
+  groupName: string,
+  newFileName: string,
+  sheetType?: string
+) => {
+  const existing = editableFileNames.value.find(
+    item => item.groupName === groupName && item.sheetType === sheetType
+  );
+  if (existing) {
+    existing.fileName = newFileName;
+  } else {
+    editableFileNames.value.push({
+      groupName: groupName,
+      fileName: newFileName,
+      sheetType: sheetType
+    });
+  }
+};
+
+// 应用工作表样式
+const applyWorksheetStyling = async (
+  worksheet: ExcelJS.Worksheet,
+  data: any[][],
+  departmentKeyword: string
+) => {
+  // 写入数据
+  data.forEach((row, rowIndex) => {
+    row.forEach((cellValue, colIndex) => {
+      const cell = worksheet.getCell(rowIndex + 1, colIndex + 1);
+      cell.value = cellValue;
+
+      if (rowIndex < 3) {
+        // 前三行应用居中对齐、边框和字体样式
+        cell.alignment = {
+          horizontal: "center",
+          vertical: "middle"
+        };
+
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" }
+        };
+
+        // 设置字体样式
+        if (rowIndex === 0) {
+          cell.font = { name: "微软雅黑", size: 16, bold: true };
+        } else if (rowIndex === 1) {
+          cell.font = { name: "微软雅黑", size: 11, bold: true };
+        } else if (rowIndex === 2) {
+          cell.font = { name: "微软雅黑", size: 11, bold: true };
+        }
+      } else {
+        // 第四行及以后应用居中对齐和边框样式
+        cell.alignment = {
+          horizontal: "center",
+          vertical: "middle"
+        };
+
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" }
+        };
+      }
+    });
+  });
+
+  // 检查前三行中相邻的单元格，如果值相等就合并
+  for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
+    let startCol = 0;
+    for (let colIndex = 1; colIndex < data[rowIndex].length; colIndex++) {
+      const currentValue = data[rowIndex][colIndex];
+      const previousValue = data[rowIndex][startCol];
+
+      if (
+        currentValue &&
+        previousValue &&
+        currentValue.toString() === previousValue.toString()
+      ) {
+        continue;
+      } else {
+        if (colIndex - 1 > startCol) {
+          worksheet.mergeCells(
+            rowIndex + 1,
+            startCol + 1,
+            rowIndex + 1,
+            colIndex
+          );
+          const mergedCell = worksheet.getCell(rowIndex + 1, startCol + 1);
+          mergedCell.alignment = { horizontal: "center", vertical: "middle" };
+        }
+        startCol = colIndex;
+      }
+    }
+
+    if (data[rowIndex].length - 1 > startCol) {
+      worksheet.mergeCells(
+        rowIndex + 1,
+        startCol + 1,
+        rowIndex + 1,
+        data[rowIndex].length
+      );
+      const mergedCell = worksheet.getCell(rowIndex + 1, startCol + 1);
+      mergedCell.alignment = { horizontal: "center", vertical: "middle" };
+    }
+  }
+
+  // 设置行高
+  worksheet.eachRow((row, rowNumber) => {
+    row.height = 40;
+  });
+
+  // 查找第三行中"应付金额"所在的列
+  let paymentAmountColIndex = -1;
+  const thirdRow = data[2];
+  if (thirdRow) {
+    thirdRow.forEach((cellValue, index) => {
+      if (cellValue && cellValue.toString() === "应付金额") {
+        paymentAmountColIndex = index;
+      }
+    });
+  }
+
+  // 对应付金额列进行求和并添加合计行
+  if (paymentAmountColIndex !== -1 && data.length > 3) {
+    let sum = 0;
+    for (let i = 3; i < data.length; i++) {
+      const value = data[i][paymentAmountColIndex];
+      if (value !== null && value !== undefined && value !== "") {
+        const numValue = parseFloat(value.toString());
+        if (!isNaN(numValue)) {
+          sum += numValue;
+        }
+      }
+    }
+
+    const summaryRow = new Array(data[0].length).fill("");
+    summaryRow[0] = "合计";
+    summaryRow[paymentAmountColIndex] = sum;
+
+    const summaryRowIndex = data.length + 1;
+    summaryRow.forEach((cellValue, colIndex) => {
+      const cell = worksheet.getCell(summaryRowIndex, colIndex + 1);
+      cell.value = cellValue;
+
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        bottom: { style: "thin" },
+        left: { style: "thin" },
+        right: { style: "thin" }
+      };
+
+      if (colIndex === 0 || colIndex === paymentAmountColIndex) {
+        cell.font = { name: "微软雅黑", size: 10, bold: true };
+      }
+    });
+
+    worksheet.getRow(summaryRowIndex).height = 40;
+  }
+
+  // 自动调整列宽
+  worksheet.columns.forEach((column, index) => {
+    let maxLength = 0;
+    column.eachCell((cell, rowNumber) => {
+      if (cell.value) {
+        const text = cell.value.toString();
+        const charWidth = text.split("").reduce((width, char) => {
+          return width + (char.charCodeAt(0) > 127 ? 2 : 1);
+        }, 0);
+        if (charWidth > maxLength) {
+          maxLength = charWidth;
+        }
+      }
+    });
+    column.width = Math.max(maxLength * 1.1, 15);
+  });
+};
+
 // 生成分组Excel文件并打包成ZIP
 const generateGroupedExcelFiles = async () => {
-  if (!originalWorkbook.value || excelData.value.length === 0) {
+  if (!originalWorkbook.value || Object.keys(allSheetData.value).length === 0) {
     ElMessage.error("请先上传并处理Excel文件");
     return;
   }
@@ -228,245 +584,101 @@ const generateGroupedExcelFiles = async () => {
   generating.value = true;
 
   try {
-    // 重新计算分组数据
-    const departmentColumnIndex = (excelData.value[2] as any[]).findIndex(
-      (cell: any) => cell && cell.toString().includes("入住人部门")
-    );
-
-    if (departmentColumnIndex === -1) {
-      ElMessage.error("未找到入住人部门列");
-      generating.value = false;
-      return;
-    }
-
-    const validDataFromRow4 = excelData.value
-      .slice(3)
-      .filter((row: any[], index: number) => {
-        return (
-          row[departmentColumnIndex] &&
-          row[departmentColumnIndex].toString().trim() !== ""
-        );
-      })
-      .map((row: any[], index: number) => ({
-        行号: index + 4,
-        入住人部门: row[departmentColumnIndex],
-        完整行数据: row
-      }));
-
-    // 分组处理
-    const groups = new Map<string, typeof validDataFromRow4>();
-    validDataFromRow4.forEach(item => {
-      const department = item.入住人部门.toString();
-      const firstPart = department.split("-")[0];
-      if (!groups.has(firstPart)) {
-        groups.set(firstPart, []);
-      }
-      groups.get(firstPart)!.push(item);
-    });
-
-    // 调试分组结果
-    console.log(`有效数据总条数: ${validDataFromRow4.length}`);
-    console.log(`分组数量: ${groups.size}`);
-    groups.forEach((groupItems, groupName) => {
-      console.log(`组名: ${groupName}, 数据条数: ${groupItems.length}`);
-      console.log(
-        `行号范围: ${Math.min(...groupItems.map(i => i.行号))}-${Math.max(...groupItems.map(i => i.行号))}`
-      );
-    });
-
-    console.log(`准备生成 ${groups.size} 个Excel文件`);
+    const groupInfo = getGroupInfo();
+    console.log(`准备生成 ${groupInfo.length} 个Excel文件`);
 
     // 创建ZIP文件
     const zip = new JSZip();
 
-    // 为每个组生成Excel文件
-    for (const [groupName, groupItems] of groups.entries()) {
+    // 按分组名组织数据，每个分组可能包含多个工作表
+    const groupedData = new Map<
+      string,
+      { sheetType: string; data: any[]; groupName: string }[]
+    >();
+
+    groupInfo.forEach(group => {
+      if (!groupedData.has(group.groupName)) {
+        groupedData.set(group.groupName, []);
+      }
+      groupedData.get(group.groupName)!.push({
+        sheetType: group.sheetType,
+        data: allSheetData.value[group.sheetType],
+        groupName: group.groupName
+      });
+    });
+
+    // 为每个分组生成Excel文件
+    for (const [groupName, sheets] of groupedData.entries()) {
       console.log(
-        `生成文件: ${groupName}.xlsx，数据条数: ${groupItems.length}`
-      );
-      console.log(
-        `该组包含的行号:`,
-        groupItems.map(item => item.行号)
+        `生成文件: ${groupName}.xlsx，包含 ${sheets.length} 个工作表`
       );
 
       // 创建新的工作簿
       const newWorkbook = new ExcelJS.Workbook();
 
-      // 创建工作表
-      const newWorksheet = newWorkbook.addWorksheet("酒店明细(国内)", {
-        views: [{ showGridLines: true }]
-      });
+      // 为每个工作表创建对应的工作表
+      for (const sheetInfo of sheets) {
+        const { sheetType, data } = sheetInfo;
 
-      // 设置默认行高
-      newWorksheet.properties.defaultRowHeight = 40;
+        if (!data || data.length === 0) continue;
 
-      // 复制原始前三行
-      const headerRows = excelData.value.slice(0, 3);
-
-      // 写入数据到工作表
-      const newData = [...headerRows];
-      groupItems.forEach(item => {
-        newData.push(item.完整行数据);
-      });
-
-      console.log(
-        `文件 ${groupName}.xlsx 总行数: ${newData.length} (前三行 + ${groupItems.length}条数据)`
-      );
-
-      // 写入数据
-      newData.forEach((row, rowIndex) => {
-        row.forEach((cellValue, colIndex) => {
-          const cell = newWorksheet.getCell(rowIndex + 1, colIndex + 1);
-          cell.value = cellValue;
-
-          if (rowIndex < 3) {
-            // 前三行应用居中对齐、边框和字体样式
-            cell.alignment = {
-              horizontal: "center",
-              vertical: "middle"
-            };
-
-            cell.border = {
-              top: { style: "thin" },
-              bottom: { style: "thin" },
-              left: { style: "thin" },
-              right: { style: "thin" }
-            };
-
-            // 设置字体样式
-            if (rowIndex === 0) {
-              // 第一行：16号字体，加粗，微软雅黑
-              cell.font = {
-                name: "微软雅黑",
-                size: 16,
-                bold: true
-              };
-            } else if (rowIndex === 1) {
-              // 第二行：11号字体，加粗，微软雅黑
-              cell.font = {
-                name: "微软雅黑",
-                size: 11,
-                bold: true
-              };
-            } else if (rowIndex === 2) {
-              // 第三行：10号字体，加粗，微软雅黑
-              cell.font = {
-                name: "微软雅黑",
-                size: 10,
-                bold: true
-              };
-            }
-          } else {
-            // 第四行及以后应用居中对齐和边框样式
-            cell.alignment = {
-              horizontal: "center",
-              vertical: "middle"
-            };
-
-            cell.border = {
-              top: { style: "thin" },
-              bottom: { style: "thin" },
-              left: { style: "thin" },
-              right: { style: "thin" }
-            };
-          }
+        const sheetName = sheetType === "hotel" ? "国内酒店" : "火车票";
+        const newWorksheet = newWorkbook.addWorksheet(sheetName, {
+          views: [{ showGridLines: true }]
         });
-      });
 
-      // 检查前三行中相邻的单元格，如果值相等就合并
-      for (let rowIndex = 0; rowIndex < 3; rowIndex++) {
-        let startCol = 0;
-        for (
-          let colIndex = 1;
-          colIndex < newData[rowIndex].length;
-          colIndex++
-        ) {
-          const currentValue = newData[rowIndex][colIndex];
-          const previousValue = newData[rowIndex][startCol];
+        // 设置默认行高
+        newWorksheet.properties.defaultRowHeight = 40;
 
-          if (
-            currentValue &&
-            previousValue &&
-            currentValue.toString() === previousValue.toString()
-          ) {
-            // 相邻单元格值相等，继续检查下一个
-            continue;
-          } else {
-            // 值不相等或为空，合并前面的相同值单元格
-            if (colIndex - 1 > startCol) {
-              // 有连续的相同值需要合并
-              newWorksheet.mergeCells(
-                rowIndex + 1,
-                startCol + 1,
-                rowIndex + 1,
-                colIndex
-              );
+        // 获取该工作表的分组数据
+        const departmentKeyword =
+          sheetType === "hotel" ? "入住人部门" : "乘车人部门";
+        const departmentColumnIndex = (data[2] as any[]).findIndex(
+          (cell: any) => cell && cell.toString().includes(departmentKeyword)
+        );
 
-              // 设置合并后单元格的样式
-              const mergedCell = newWorksheet.getCell(
-                rowIndex + 1,
-                startCol + 1
-              );
-              mergedCell.alignment = {
-                horizontal: "center",
-                vertical: "middle"
-              };
-            }
-            startCol = colIndex;
-          }
-        }
+        if (departmentColumnIndex === -1) continue;
 
-        // 处理行末的最后一段相同值
-        if (newData[rowIndex].length - 1 > startCol) {
-          newWorksheet.mergeCells(
-            rowIndex + 1,
-            startCol + 1,
-            rowIndex + 1,
-            newData[rowIndex].length
+        // 筛选该分组的数据
+        const groupData = data.slice(3).filter((row: any[], index: number) => {
+          return (
+            row[departmentColumnIndex] &&
+            row[departmentColumnIndex].toString().split("-")[0] === groupName
           );
-
-          // 设置合并后单元格的样式
-          const mergedCell = newWorksheet.getCell(rowIndex + 1, startCol + 1);
-          mergedCell.alignment = {
-            horizontal: "center",
-            vertical: "middle"
-          };
-        }
-      }
-
-      // 设置行高
-      newWorksheet.eachRow((row, rowNumber) => {
-        // 所有行都设置40磅行高
-        row.height = 40; // ExcelJS中高度单位
-      });
-
-      // 自动调整列宽
-      newWorksheet.columns.forEach((column, index) => {
-        let maxLength = 0;
-        column.eachCell((cell, rowNumber) => {
-          if (cell.value) {
-            const text = cell.value.toString();
-            // 考虑中文字符，中文字符比英文字符宽
-            const charWidth = text.split("").reduce((width, char) => {
-              // 中文字符占2个宽度，英文字符占1个宽度
-              return width + (char.charCodeAt(0) > 127 ? 2 : 1);
-            }, 0);
-            if (charWidth > maxLength) {
-              maxLength = charWidth;
-            }
-          }
         });
-        // 设置列宽，Excel中每个单位宽度大约对应一个英文字符
-        // 中文字符需要更多空间，所以需要更大的系数
-        column.width = Math.max(maxLength * 1.1, 15); // 最小宽度20
-      });
+
+        // 复制原始前三行
+        const headerRows = data.slice(0, 3);
+
+        // 写入数据到工作表
+        const newData = [...headerRows];
+        groupData.forEach(row => {
+          newData.push(row);
+        });
+
+        console.log(`  工作表 ${sheetName}: ${newData.length} 行数据`);
+
+        // 应用样式和格式
+        await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
+      }
 
       // 生成Excel文件内容
       const excelBuffer = await newWorkbook.xlsx.writeBuffer();
 
-      // 添加到ZIP文件
-      const fileName = groupName + ".xlsx";
-      zip.file(fileName, excelBuffer);
+      // 添加到ZIP文件 - 使用用户编辑的文件名
+      const savedFileName = editableFileNames.value.find(
+        item =>
+          item.groupName === groupName && item.sheetType === sheets[0].sheetType
+      );
+      const userFileName = savedFileName ? savedFileName.fileName : groupName;
+      const finalFileName = userFileName.endsWith(".xlsx")
+        ? userFileName
+        : `${userFileName}.xlsx`;
+
+      console.log(
+        `使用文件名: ${finalFileName} (原始分组: ${groupName}, 用户输入: ${userFileName})`
+      );
+      zip.file(finalFileName, excelBuffer);
     }
 
     // 生成ZIP文件
@@ -476,10 +688,12 @@ const generateGroupedExcelFiles = async () => {
     const zipBlob = new Blob([new Uint8Array(zipBuffer)], {
       type: "application/zip"
     });
-    const fileName = `账单分账_${uploadedFile.value?.name.replace(".xlsx", "").replace(".xls", "")}_${new Date().toISOString().slice(0, 10)}.zip`;
+    const fileName = `国内酒店账单_${uploadedFile.value?.name.replace(".xlsx", "").replace(".xls", "")}_${new Date().toISOString().slice(0, 10)}.zip`;
     saveAs(zipBlob, fileName);
 
-    ElMessage.success(`成功生成 ${groups.size} 个Excel文件并打包为ZIP文件`);
+    ElMessage.success(
+      `成功生成 ${groupInfo.length} 个Excel文件并打包为ZIP文件`
+    );
     console.log(`生成完成: ${fileName}`);
   } catch (error) {
     console.error("生成文件失败:", error);
@@ -530,23 +744,8 @@ const generateGroupedExcelFiles = async () => {
       <!-- 数据展示区域 -->
       <div v-if="showData && excelData.length > 0" class="data-section">
         <div class="data-header">
-          <h3>酒店明细(国内) - 数据预览</h3>
+          <h3>分组信息 - 将生成以下文件</h3>
           <div class="header-buttons">
-            <el-button
-              type="primary"
-              @click="
-                console.log('Excel文件详细信息:', {
-                  fileName: uploadedFile?.name,
-                  fileSize: uploadedFile?.size,
-                  sheetName: '酒店明细(国内)',
-                  rowCount: excelData.length,
-                  columnCount: excelData[0]?.length || 0,
-                  data: excelData
-                })
-              "
-            >
-              打印详细信息到控制台
-            </el-button>
             <el-button
               type="success"
               :loading="generating"
@@ -560,25 +759,39 @@ const generateGroupedExcelFiles = async () => {
 
         <div class="data-summary">
           <el-alert
-            title="数据概览"
+            title="分组概览"
             type="info"
-            :description="`工作表 '酒店明细(国内)' 包含 ${excelData.length} 行数据，${excelData[0]?.length || 0} 列`"
+            :description="`检测到 ${getGroupCount()} 个分组，将生成 ${getGroupCount()} 个Excel文件`"
             show-icon
           />
         </div>
 
         <div class="data-table">
-          <el-table :data="excelData.slice(0, 10)" border style="width: 100%">
-            <el-table-column
-              v-for="(header, index) in excelData[0] || []"
-              :key="index"
-              :label="`列 ${index + 1}`"
-              :prop="index.toString()"
-            />
+          <el-table :data="getGroupInfo()" border style="width: 100%">
+            <el-table-column prop="sheetName" label="工作表" width="120" />
+            <el-table-column prop="groupName" label="分组名称" width="200" />
+            <el-table-column prop="count" label="数据条数" width="120" />
+            <el-table-column prop="rowRange" label="行号范围" width="150" />
+            <el-table-column label="生成文件名">
+              <template #default="scope">
+                <el-input
+                  :model-value="scope.row.editableFileName"
+                  @update:model-value="
+                    value =>
+                      updateFileName(
+                        scope.row.groupName,
+                        value,
+                        scope.row.sheetType
+                      )
+                  "
+                  placeholder="请输入文件名"
+                  style="width: 100%"
+                >
+                  <template #suffix>.xlsx</template>
+                </el-input>
+              </template>
+            </el-table-column>
           </el-table>
-          <p v-if="excelData.length > 10" class="data-more">
-            显示前10行，共{{ excelData.length }}行数据
-          </p>
         </div>
       </div>
 
