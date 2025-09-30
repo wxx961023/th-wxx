@@ -49,6 +49,11 @@ const readFile = (file: File) => {
               departmentKeyword: "入住人部门"
             },
             {
+              name: "酒店明细(国际)",
+              key: "internationalHotel",
+              departmentKeyword: "入住人部门"
+            },
+            {
               name: "火车票明细",
               key: "train",
               departmentKeyword: "乘车人部门"
@@ -56,6 +61,11 @@ const readFile = (file: File) => {
             {
               name: "机票明细(国内)",
               key: "flight",
+              departmentKeyword: "乘机人部门"
+            },
+            {
+              name: "机票明细(国际)",
+              key: "internationalFlight",
               departmentKeyword: "乘机人部门"
             }
           ];
@@ -284,14 +294,19 @@ const beforeUpload = (file: File) => {
 
 // 获取分组信息（按公司名称汇总）
 const getGroupInfo = () => {
-  const companyGroups = new Map<string, {
-    groupName: string;
-    hotelInfo?: { count: number; rowRange: string };
-    trainInfo?: { count: number; rowRange: string };
-    flightInfo?: { count: number; rowRange: string };
-    totalCount: number;
-    editableFileName: string;
-  }>();
+  const companyGroups = new Map<
+    string,
+    {
+      groupName: string;
+      hotelInfo?: { count: number; rowRange: string };
+      internationalHotelInfo?: { count: number; rowRange: string };
+      trainInfo?: { count: number; rowRange: string };
+      flightInfo?: { count: number; rowRange: string };
+      internationalFlightInfo?: { count: number; rowRange: string };
+      totalCount: number;
+      editableFileName: string;
+    }
+  >();
 
   // 处理酒店数据
   if (allSheetData.value.hotel && allSheetData.value.hotel.length > 0) {
@@ -304,18 +319,52 @@ const getGroupInfo = () => {
 
     hotelGroups.forEach(group => {
       if (!companyGroups.has(group.groupName)) {
+        const generatedFileName = generateFileName(group.groupName);
+        companyGroups.set(group.groupName, {
+          groupName: group.groupName,
+          totalCount: 0,
+          editableFileName: generatedFileName
+        });
+      }
+
+      const companyGroup = companyGroups.get(group.groupName)!;
+      companyGroup.hotelInfo = {
+        count: group.count,
+        rowRange: group.rowRange
+      };
+      companyGroup.totalCount += group.count;
+    });
+  }
+
+  // 处理国际酒店数据
+  if (
+    allSheetData.value.internationalHotel &&
+    allSheetData.value.internationalHotel.length > 0
+  ) {
+    const internationalHotelGroups = processSheetData(
+      allSheetData.value.internationalHotel,
+      "酒店明细(国际)",
+      "入住人部门",
+      "internationalHotel"
+    );
+
+    internationalHotelGroups.forEach(group => {
+      if (!companyGroups.has(group.groupName)) {
         const existing = editableFileNames.value.find(
           item => item.groupName === group.groupName
         );
         companyGroups.set(group.groupName, {
           groupName: group.groupName,
           totalCount: 0,
-          editableFileName: existing ? existing.fileName : group.groupName
+          editableFileName: generateFileName(
+            group.groupName,
+            existing?.fileName
+          )
         });
       }
 
       const companyGroup = companyGroups.get(group.groupName)!;
-      companyGroup.hotelInfo = {
+      companyGroup.internationalHotelInfo = {
         count: group.count,
         rowRange: group.rowRange
       };
@@ -340,7 +389,10 @@ const getGroupInfo = () => {
         companyGroups.set(group.groupName, {
           groupName: group.groupName,
           totalCount: 0,
-          editableFileName: existing ? existing.fileName : group.groupName
+          editableFileName: generateFileName(
+            group.groupName,
+            existing?.fileName
+          )
         });
       }
 
@@ -370,7 +422,10 @@ const getGroupInfo = () => {
         companyGroups.set(group.groupName, {
           groupName: group.groupName,
           totalCount: 0,
-          editableFileName: existing ? existing.fileName : group.groupName
+          editableFileName: generateFileName(
+            group.groupName,
+            existing?.fileName
+          )
         });
       }
 
@@ -383,7 +438,44 @@ const getGroupInfo = () => {
     });
   }
 
-  return Array.from(companyGroups.values());
+  // 处理国际机票数据
+  if (
+    allSheetData.value.internationalFlight &&
+    allSheetData.value.internationalFlight.length > 0
+  ) {
+    const internationalFlightGroups = processSheetData(
+      allSheetData.value.internationalFlight,
+      "机票明细(国际)",
+      "乘机人部门",
+      "internationalFlight"
+    );
+
+    internationalFlightGroups.forEach(group => {
+      if (!companyGroups.has(group.groupName)) {
+        const existing = editableFileNames.value.find(
+          item => item.groupName === group.groupName
+        );
+        companyGroups.set(group.groupName, {
+          groupName: group.groupName,
+          totalCount: 0,
+          editableFileName: generateFileName(
+            group.groupName,
+            existing?.fileName
+          )
+        });
+      }
+
+      const companyGroup = companyGroups.get(group.groupName)!;
+      companyGroup.internationalFlightInfo = {
+        count: group.count,
+        rowRange: group.rowRange
+      };
+      companyGroup.totalCount += group.count;
+    });
+  }
+
+  const result = Array.from(companyGroups.values());
+  return result;
 };
 
 // 处理单个工作表数据
@@ -418,7 +510,15 @@ const processSheetData = (
       const departmentText = departmentValue.toString();
 
       // 过滤掉合计行、总计行等非数据行
-      const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
+      const summaryKeywords = [
+        "合计",
+        "总计",
+        "总和",
+        "小计",
+        "sum",
+        "total",
+        "summary"
+      ];
       const isSummaryRow = summaryKeywords.some(keyword =>
         departmentText.toLowerCase().includes(keyword.toLowerCase())
       );
@@ -427,15 +527,18 @@ const processSheetData = (
       const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
 
       // 过滤空值、特殊字符
-      const isEmptyOrSpecial = departmentText.trim() === "" ||
-                               /^[\-_=+]+$/.test(departmentText.trim()) ||
-                               departmentText.length < 2;
+      const isEmptyOrSpecial =
+        departmentText.trim() === "" ||
+        /^[\-_=+]+$/.test(departmentText.trim()) ||
+        departmentText.length < 2;
 
       // 如果是空值、合计行、纯数字或特殊字符，不进行分组处理
       if (isSummaryRow || isPureNumber || isEmptyOrSpecial) {
-        console.log(`跳过非数据行: 行号${index + 4}, 内容: ${departmentText}, 类型: ${
-          isSummaryRow ? '合计行' : isPureNumber ? '纯数字' : '空值/特殊字符'
-        }`);
+        console.log(
+          `跳过非数据行: 行号${index + 4}, 内容: ${departmentText}, 类型: ${
+            isSummaryRow ? "合计行" : isPureNumber ? "纯数字" : "空值/特殊字符"
+          }`
+        );
         return false;
       }
 
@@ -690,6 +793,55 @@ const applyWorksheetStyling = async (
   });
 };
 
+// 导入公司配置
+import companyConfig from "./companyConfig";
+
+// 生成上个月日期范围字符串（处理上个月的账单）
+const generateCurrentMonthDateRange = (): string => {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-11
+  // 计算上个月的年月
+  let targetYear, targetMonth;
+
+  if (currentMonth === 0) {
+    // 当前是1月，上个月是去年的12月
+    targetYear = currentYear - 1;
+    targetMonth = 12; // 12月
+  } else {
+    targetYear = currentYear;
+    targetMonth = currentMonth; // 因为getMonth()返回0-11，所以直接使用
+  }
+
+  // 计算上个月的最后一天：当前月份第1天减去1天
+  const currentMonthFirstDay = new Date(currentYear, currentMonth, 1);
+  const lastDayOfTargetMonth = new Date(
+    currentMonthFirstDay.getTime() - 24 * 60 * 60 * 1000
+  );
+
+  // 格式化为 M.D-M.D 格式（如 8.1-8.31，12.1-12.31）
+  const startDate = `${targetMonth}.1`;
+  const endDate = `${targetMonth}.${lastDayOfTargetMonth.getDate()}`;
+  const dateRange = `${startDate}-${endDate}`;
+
+  return dateRange;
+};
+
+// 生成带日期的文件名
+const generateFileName = (
+  groupName: string,
+  existingFileName?: string
+): string => {
+  const companyInfo = companyConfig.getCompanyInfo(groupName);
+
+  const dateRange = generateCurrentMonthDateRange();
+
+  // 优先使用 shortName + 日期
+  const finalFileName = `${companyInfo.shortName}${dateRange}`;
+
+  return finalFileName;
+};
+
 // 生成分组Excel文件并打包成ZIP
 const generateGroupedExcelFiles = async () => {
   if (!originalWorkbook.value || Object.keys(allSheetData.value).length === 0) {
@@ -706,14 +858,347 @@ const generateGroupedExcelFiles = async () => {
     // 创建ZIP文件
     const zip = new JSZip();
 
+    // 预加载结算单模板
+    let templateWorkbook: ExcelJS.Workbook;
+    try {
+      console.log("开始加载结算单模板...");
+
+      // 尝试多个可能的路径
+      const possiblePaths = [
+        "./cxjg/结算单.xlsx", // public目录下的文件
+        "/cxjg/结算单.xlsx", // 根路径访问
+        "cxjg/结算单.xlsx" // 相对路径
+      ];
+
+      let templateBuffer: ArrayBuffer | null = null;
+      let successPath = "";
+
+      for (const path of possiblePaths) {
+        try {
+          console.log(`尝试路径: ${path}`);
+          const templateResponse = await fetch(path);
+
+          if (templateResponse.ok) {
+            console.log(
+              `文件找到，大小: ${templateResponse.headers.get("content-length")} bytes`
+            );
+            templateBuffer = await templateResponse.arrayBuffer();
+            successPath = path;
+            break;
+          } else {
+            console.log(`路径 ${path} 返回状态: ${templateResponse.status}`);
+          }
+        } catch (pathError) {
+          console.log(`路径 ${path} 访问失败:`, pathError);
+        }
+      }
+
+      if (!templateBuffer) {
+        throw new Error(
+          `结算单模板文件未找到，请确保模板文件存在于以下任一路径:\n${possiblePaths.join("\n")}`
+        );
+      }
+
+      console.log(
+        `成功加载模板文件: ${successPath}, 大小: ${templateBuffer.byteLength} bytes`
+      );
+
+      // 验证文件格式
+      if (templateBuffer.byteLength < 100) {
+        throw new Error("模板文件太小，可能不是有效的Excel文件");
+      }
+
+      templateWorkbook = new ExcelJS.Workbook();
+      await templateWorkbook.xlsx.load(templateBuffer);
+
+      console.log(
+        "成功解析结算单模板，工作表数量:",
+        templateWorkbook.worksheets.length
+      );
+
+      // 验证结算单工作表是否存在
+      const settlementWorksheet = templateWorkbook.getWorksheet("结算单");
+      if (!settlementWorksheet) {
+        throw new Error('模板文件中没有找到"结算单"工作表，请检查模板文件');
+      }
+
+      console.log("成功找到结算单工作表，可以开始使用");
+    } catch (error) {
+      console.error("加载结算单模板失败:", error);
+      let errorMessage = "加载结算单模板失败";
+
+      if (error instanceof Error) {
+        if (error.message.includes("Can't find end of central directory")) {
+          errorMessage =
+            "结算单模板文件格式错误或文件损坏，请确保是有效的Excel文件(.xlsx格式)";
+        } else {
+          errorMessage = `加载结算单模板失败: ${error.message}`;
+        }
+      }
+
+      ElMessage.error(errorMessage);
+      generating.value = false;
+      return;
+    }
+
     // 为每个公司生成Excel文件
     for (const companyGroup of groupInfo) {
+      // 始终使用 shortName + 日期生成最新的文件名
+      const latestFileName = generateFileName(companyGroup.groupName);
       console.log(
-        `生成文件: ${companyGroup.editableFileName}.xlsx，公司: ${companyGroup.groupName}`
+        `生成文件: ${latestFileName}.xlsx，公司: ${companyGroup.groupName}`
       );
 
       // 创建新的工作簿
       const newWorkbook = new ExcelJS.Workbook();
+
+      // 添加结算单工作表（使用模板）
+      const templateWorksheet = templateWorkbook.getWorksheet("结算单");
+
+      if (!templateWorksheet) {
+        throw new Error("无法获取模板的结算单工作表");
+      }
+
+      // 获取公司配置信息
+      const companyInfo = companyConfig.getCompanyInfo(companyGroup.groupName);
+      console.log(`公司配置信息:`, companyInfo);
+
+      // 打印结算单模板数据
+      console.log(`===== 结算单模板数据内容 (${companyGroup.groupName}) =====`);
+      const templateData: any[][] = [];
+      templateWorksheet.eachRow((row, rowNumber) => {
+        const rowData: any[] = [];
+        row.eachCell((cell, colNumber) => {
+          rowData[colNumber] = cell.value;
+        });
+        templateData[rowNumber] = rowData;
+
+        // 打印有内容的行
+        if (
+          rowData.some(
+            cell => cell !== null && cell !== undefined && cell !== ""
+          )
+        ) {
+          console.log(`第${rowNumber}行:`, rowData);
+        }
+      });
+      console.log(`===== 结算单模板数据结束，共${templateData.length}行 =====`);
+
+      // 单独打印第九行数据
+      if (templateData[9]) {
+        console.log(`===== 第九行数据单独打印 =====`);
+        console.log(`第九行数据:`, templateData[9]);
+        console.log(`第九行详细信息:`);
+        templateData[9].forEach((cellValue, index) => {
+          if (
+            cellValue !== null &&
+            cellValue !== undefined &&
+            cellValue !== ""
+          ) {
+            console.log(`  第${index}列: ${cellValue}`);
+          }
+        });
+        console.log(`===== 第九行数据打印结束 =====`);
+      } else {
+        console.log("第九行数据不存在或为空");
+      }
+
+      const summaryWorksheet = newWorkbook.addWorksheet("结算单");
+
+      // 复制模板结构和样式
+      templateWorksheet.eachRow((row, rowNumber) => {
+        row.eachCell((cell, colNumber) => {
+          const newCell = summaryWorksheet.getCell(rowNumber, colNumber);
+
+          // 复制原始值，并替换公司名称、联系人和日期
+          let cellValue = cell.value;
+          if (typeof cellValue === "string") {
+            let hasChanges = false;
+            const originalValue = cellValue;
+
+            // 替换《》内的公司名称
+            if (cellValue.includes("《") && cellValue.includes("》")) {
+              cellValue = cellValue.replace(
+                /《([^》]+)》/g,
+                `《${companyGroup.groupName}》`
+              );
+              hasChanges = true;
+            }
+
+            // 替换"收件方："后面的公司名称
+            if (cellValue.includes("收件方：")) {
+              cellValue = cellValue.replace(
+                /收件方：[^，,\n]+/,
+                `收件方：${companyGroup.groupName}`
+              );
+              hasChanges = true;
+            }
+
+            // 替换联系人信息
+            if (cellValue.includes("收件人：") && companyInfo.contact) {
+              cellValue = cellValue.replace(
+                /收件人：[^，,\n]+/,
+                `收件人：${companyInfo.contact}`
+              );
+              hasChanges = true;
+            }
+
+            // 替换手机号信息
+            if (cellValue.includes("电话：") && companyInfo.phone) {
+              // 获取当前电话
+              const currentPhoneMatch = cellValue.match(/电话：([^，,\n]+)/);
+              if (currentPhoneMatch) {
+                const currentPhone = currentPhoneMatch[1];
+                // 如果当前电话不等于 15768628831，则保留原电话并添加公司配置的电话
+                if (currentPhone !== "15768628831") {
+                  cellValue = cellValue.replace(
+                    /电话：[^，,\n]+/,
+                    `电话：${companyInfo.phone}`
+                  );
+                  hasChanges = true;
+                }
+              }
+            }
+
+            // 动态计算上个月的最后一天（处理上个月的账单）
+            if (cellValue.includes("最晚结算日：")) {
+              const now = new Date();
+              const currentYear = now.getFullYear();
+              const currentMonth = now.getMonth(); // 0-11
+
+              // 计算上个月的年月
+              let targetYear, targetMonth;
+
+              if (currentMonth === 0) {
+                // 当前是1月，上个月是去年的12月
+                targetYear = currentYear - 1;
+                targetMonth = 12;
+              } else {
+                targetYear = currentYear;
+                targetMonth = currentMonth;
+              }
+
+              // 计算上个月的最后一天：当前月份第1天减去1天
+              const currentMonthFirstDay = new Date(
+                currentYear,
+                currentMonth,
+                1
+              );
+              const lastDayOfTargetMonth = new Date(
+                currentMonthFirstDay.getTime() - 24 * 60 * 60 * 1000
+              );
+
+              // 格式化为 YYYY-MM-DD
+              const formattedDate = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(lastDayOfTargetMonth.getDate()).padStart(2, "0")}`;
+
+              cellValue = cellValue.replace(
+                /最晚结算日：\d{4}-\d{2}-\d{2}/,
+                `最晚结算日：${formattedDate}`
+              );
+              hasChanges = true;
+            }
+
+            // 动态生成结算款项描述文本
+            if (cellValue.includes("结算款项列示如下：")) {
+              const now = new Date();
+              const currentYear = now.getFullYear();
+              const currentMonth = now.getMonth(); // 0-11
+
+              // 计算上个月的年月（与上面逻辑一致）
+              let targetYear, targetMonth;
+
+              if (currentMonth === 0) {
+                // 当前是1月，上个月是去年的12月
+                targetYear = currentYear - 1;
+                targetMonth = 12;
+              } else {
+                targetYear = currentYear;
+                targetMonth = currentMonth;
+              }
+
+              // 计算上个月的最后一天
+              const currentMonthFirstDay = new Date(
+                currentYear,
+                currentMonth,
+                1
+              );
+              const lastDayOfTargetMonth = new Date(
+                currentMonthFirstDay.getTime() - 24 * 60 * 60 * 1000
+              );
+
+              // 格式化日期
+              const startDate = `${targetYear}-${String(targetMonth).padStart(2, "0")}-01`;
+              const endDate = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(lastDayOfTargetMonth.getDate()).padStart(2, "0")}`;
+
+              // 替换结算款项描述
+              cellValue = cellValue.replace(
+                /本公司\d{4}-\d{2}-\d{2}至\d{4}-\d{2}-\d{2}与贵公司\([^)]+\)的结算款项列示如下：/,
+                `本公司${startDate}至${endDate}与贵公司(${companyGroup.groupName})的结算款项列示如下：`
+              );
+              hasChanges = true;
+            }
+
+            // 动态生成付款到期日
+            if (cellValue.includes("前，将本期应还金额付款到以下账户：")) {
+              const now = new Date();
+              const currentYear = now.getFullYear();
+              const currentMonth = now.getMonth() + 1; // 1-12
+
+              // 计算当月的最后一天
+              const nextMonthFirstDay = new Date(currentYear, currentMonth, 1);
+              const lastDayOfCurrentMonth = new Date(
+                nextMonthFirstDay.getTime() - 24 * 60 * 60 * 1000
+              );
+
+              // 格式化为 YYYY-MM-DD
+              const formattedDate = `${currentYear}-${String(currentMonth).padStart(2, "0")}-${String(lastDayOfCurrentMonth.getDate()).padStart(2, "0")}`;
+
+              // 替换付款到期日
+              cellValue = cellValue.replace(
+                /请在\d{4}-\d{2}-\d{2}前，将本期应还金额付款到以下账户：/,
+                `请在${formattedDate}前，将本期应还金额付款到以下账户：`
+              );
+              hasChanges = true;
+              console.log(`动态生成付款到期日: ${formattedDate}`);
+            }
+
+            // if (hasChanges) {
+            //   console.log(
+            //     `第${rowNumber}行第${colNumber}列替换内容:`,
+            //     originalValue,
+            //     "->",
+            //     cellValue
+            //   );
+            // }
+          }
+
+          newCell.value = cellValue;
+
+          // 复制样式
+          newCell.style = cell.style;
+        });
+      });
+
+      // 复制行高
+      templateWorksheet.eachRow((row, rowNumber) => {
+        if (row.height) {
+          summaryWorksheet.getRow(rowNumber).height = row.height;
+        }
+      });
+
+      // 复制列宽
+      templateWorksheet.columns.forEach((column, index) => {
+        if (column.width) {
+          summaryWorksheet.getColumn(index + 1).width = column.width;
+        }
+      });
+
+      // 复制合并单元格
+      templateWorksheet.model.merges?.forEach((merge: any) => {
+        summaryWorksheet.mergeCells(merge);
+      });
+
+      console.log(`使用结算单模板为 ${companyGroup.groupName} 生成工作表`);
 
       // 检查是否有酒店数据并添加工作表
       if (companyGroup.hotelInfo && allSheetData.value.hotel) {
@@ -730,44 +1215,132 @@ const generateGroupedExcelFiles = async () => {
           newWorksheet.properties.defaultRowHeight = 40;
 
           // 筛选该公司的酒店数据
-          const companyHotelData = hotelData.slice(3).filter((row: any[], index: number) => {
-            const departmentValue = row[departmentColumnIndex];
-            if (!departmentValue) return false;
+          const companyHotelData = hotelData
+            .slice(3)
+            .filter((row: any[], index: number) => {
+              const departmentValue = row[departmentColumnIndex];
+              if (!departmentValue) return false;
 
-            const departmentText = departmentValue.toString();
+              const departmentText = departmentValue.toString();
 
-            // 过滤掉合计行、总计行等非数据行
-            const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
-            const isSummaryRow = summaryKeywords.some(keyword =>
-              departmentText.toLowerCase().includes(keyword.toLowerCase())
-            );
+              // 过滤掉合计行、总计行等非数据行
+              const summaryKeywords = [
+                "合计",
+                "总计",
+                "总和",
+                "小计",
+                "sum",
+                "total",
+                "summary"
+              ];
+              const isSummaryRow = summaryKeywords.some(keyword =>
+                departmentText.toLowerCase().includes(keyword.toLowerCase())
+              );
 
-            // 过滤纯数字（可能是金额合计）
-            const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+              // 过滤纯数字（可能是金额合计）
+              const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
 
-            // 过滤空值、特殊字符
-            const isEmptyOrSpecial = departmentText.trim() === "" ||
-                                     /^[\-_=+]+$/.test(departmentText.trim()) ||
-                                     departmentText.length < 2;
+              // 过滤空值、特殊字符
+              const isEmptyOrSpecial =
+                departmentText.trim() === "" ||
+                /^[\-_=+]+$/.test(departmentText.trim()) ||
+                departmentText.length < 2;
 
-            if (isSummaryRow || isPureNumber || isEmptyOrSpecial) return false;
+              if (isSummaryRow || isPureNumber || isEmptyOrSpecial)
+                return false;
 
-            // 获取分组名称进行匹配
-            let groupName: string;
-            if (departmentText.includes("-")) {
-              groupName = departmentText.split("-")[0].trim();
-            } else {
-              groupName = departmentText.trim();
-            }
+              // 获取分组名称进行匹配
+              let groupName: string;
+              if (departmentText.includes("-")) {
+                groupName = departmentText.split("-")[0].trim();
+              } else {
+                groupName = departmentText.trim();
+              }
 
-            return groupName === companyGroup.groupName;
-          });
+              return groupName === companyGroup.groupName;
+            });
 
           // 复制原始前三行
           const headerRows = hotelData.slice(0, 3);
           const newData = [...headerRows, ...companyHotelData];
 
           console.log(`  酒店工作表: ${newData.length} 行数据`);
+
+          // 应用样式和格式
+          await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
+        }
+      }
+
+      // 检查是否有国际酒店数据并添加工作表
+      if (
+        companyGroup.internationalHotelInfo &&
+        allSheetData.value.internationalHotel
+      ) {
+        const internationalHotelData = allSheetData.value.internationalHotel;
+        const departmentKeyword = "入住人部门";
+        const departmentColumnIndex = (
+          internationalHotelData[2] as any[]
+        ).findIndex(
+          (cell: any) => cell && cell.toString().includes(departmentKeyword)
+        );
+
+        if (departmentColumnIndex !== -1) {
+          const newWorksheet = newWorkbook.addWorksheet("国际酒店", {
+            views: [{ showGridLines: true }]
+          });
+          newWorksheet.properties.defaultRowHeight = 40;
+
+          // 筛选该公司的国际酒店数据
+          const companyInternationalHotelData = internationalHotelData
+            .slice(3)
+            .filter((row: any[], index: number) => {
+              const departmentValue = row[departmentColumnIndex];
+              if (!departmentValue) return false;
+
+              const departmentText = departmentValue.toString();
+
+              // 过滤掉合计行、总计行等非数据行
+              const summaryKeywords = [
+                "合计",
+                "总计",
+                "总和",
+                "小计",
+                "sum",
+                "total",
+                "summary"
+              ];
+              const isSummaryRow = summaryKeywords.some(keyword =>
+                departmentText.toLowerCase().includes(keyword.toLowerCase())
+              );
+
+              // 过滤纯数字（可能是金额合计）
+              const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+
+              // 过滤空值、特殊字符
+              const isEmptyOrSpecial =
+                departmentText.trim() === "" ||
+                /^[\-_=+]+$/.test(departmentText.trim()) ||
+                departmentText.length < 2;
+
+              if (isSummaryRow || isPureNumber || isEmptyOrSpecial)
+                return false;
+
+              // 获取分组名称进行匹配
+              let groupName: string;
+              if (departmentText.includes("-")) {
+                groupName = departmentText.split("-")[0].trim();
+              } else {
+                groupName = departmentText.trim();
+              }
+
+              return groupName === companyGroup.groupName;
+            });
+
+          // 复制原始前三行
+          const headerRows = internationalHotelData.slice(0, 3);
+          const newData = [...headerRows, ...companyInternationalHotelData];
+
+          console.log(`  国际酒店工作表: ${newData.length} 行数据`);
 
           // 应用样式和格式
           await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
@@ -789,38 +1362,50 @@ const generateGroupedExcelFiles = async () => {
           newWorksheet.properties.defaultRowHeight = 40;
 
           // 筛选该公司的火车票数据
-          const companyTrainData = trainData.slice(3).filter((row: any[], index: number) => {
-            const departmentValue = row[departmentColumnIndex];
-            if (!departmentValue) return false;
+          const companyTrainData = trainData
+            .slice(3)
+            .filter((row: any[], index: number) => {
+              const departmentValue = row[departmentColumnIndex];
+              if (!departmentValue) return false;
 
-            const departmentText = departmentValue.toString();
+              const departmentText = departmentValue.toString();
 
-            // 过滤掉合计行、总计行等非数据行
-            const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
-            const isSummaryRow = summaryKeywords.some(keyword =>
-              departmentText.toLowerCase().includes(keyword.toLowerCase())
-            );
+              // 过滤掉合计行、总计行等非数据行
+              const summaryKeywords = [
+                "合计",
+                "总计",
+                "总和",
+                "小计",
+                "sum",
+                "total",
+                "summary"
+              ];
+              const isSummaryRow = summaryKeywords.some(keyword =>
+                departmentText.toLowerCase().includes(keyword.toLowerCase())
+              );
 
-            // 过滤纯数字（可能是金额合计）
-            const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+              // 过滤纯数字（可能是金额合计）
+              const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
 
-            // 过滤空值、特殊字符
-            const isEmptyOrSpecial = departmentText.trim() === "" ||
-                                     /^[\-_=+]+$/.test(departmentText.trim()) ||
-                                     departmentText.length < 2;
+              // 过滤空值、特殊字符
+              const isEmptyOrSpecial =
+                departmentText.trim() === "" ||
+                /^[\-_=+]+$/.test(departmentText.trim()) ||
+                departmentText.length < 2;
 
-            if (isSummaryRow || isPureNumber || isEmptyOrSpecial) return false;
+              if (isSummaryRow || isPureNumber || isEmptyOrSpecial)
+                return false;
 
-            // 获取分组名称进行匹配
-            let groupName: string;
-            if (departmentText.includes("-")) {
-              groupName = departmentText.split("-")[0].trim();
-            } else {
-              groupName = departmentText.trim();
-            }
+              // 获取分组名称进行匹配
+              let groupName: string;
+              if (departmentText.includes("-")) {
+                groupName = departmentText.split("-")[0].trim();
+              } else {
+                groupName = departmentText.trim();
+              }
 
-            return groupName === companyGroup.groupName;
-          });
+              return groupName === companyGroup.groupName;
+            });
 
           // 复制原始前三行
           const headerRows = trainData.slice(0, 3);
@@ -848,38 +1433,50 @@ const generateGroupedExcelFiles = async () => {
           newWorksheet.properties.defaultRowHeight = 40;
 
           // 筛选该公司的机票数据
-          const companyFlightData = flightData.slice(3).filter((row: any[], index: number) => {
-            const departmentValue = row[departmentColumnIndex];
-            if (!departmentValue) return false;
+          const companyFlightData = flightData
+            .slice(3)
+            .filter((row: any[], index: number) => {
+              const departmentValue = row[departmentColumnIndex];
+              if (!departmentValue) return false;
 
-            const departmentText = departmentValue.toString();
+              const departmentText = departmentValue.toString();
 
-            // 过滤掉合计行、总计行等非数据行
-            const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
-            const isSummaryRow = summaryKeywords.some(keyword =>
-              departmentText.toLowerCase().includes(keyword.toLowerCase())
-            );
+              // 过滤掉合计行、总计行等非数据行
+              const summaryKeywords = [
+                "合计",
+                "总计",
+                "总和",
+                "小计",
+                "sum",
+                "total",
+                "summary"
+              ];
+              const isSummaryRow = summaryKeywords.some(keyword =>
+                departmentText.toLowerCase().includes(keyword.toLowerCase())
+              );
 
-            // 过滤纯数字（可能是金额合计）
-            const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+              // 过滤纯数字（可能是金额合计）
+              const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
 
-            // 过滤空值、特殊字符
-            const isEmptyOrSpecial = departmentText.trim() === "" ||
-                                     /^[\-_=+]+$/.test(departmentText.trim()) ||
-                                     departmentText.length < 2;
+              // 过滤空值、特殊字符
+              const isEmptyOrSpecial =
+                departmentText.trim() === "" ||
+                /^[\-_=+]+$/.test(departmentText.trim()) ||
+                departmentText.length < 2;
 
-            if (isSummaryRow || isPureNumber || isEmptyOrSpecial) return false;
+              if (isSummaryRow || isPureNumber || isEmptyOrSpecial)
+                return false;
 
-            // 获取分组名称进行匹配
-            let groupName: string;
-            if (departmentText.includes("-")) {
-              groupName = departmentText.split("-")[0].trim();
-            } else {
-              groupName = departmentText.trim();
-            }
+              // 获取分组名称进行匹配
+              let groupName: string;
+              if (departmentText.includes("-")) {
+                groupName = departmentText.split("-")[0].trim();
+              } else {
+                groupName = departmentText.trim();
+              }
 
-            return groupName === companyGroup.groupName;
-          });
+              return groupName === companyGroup.groupName;
+            });
 
           // 复制原始前三行
           const headerRows = flightData.slice(0, 3);
@@ -892,13 +1489,826 @@ const generateGroupedExcelFiles = async () => {
         }
       }
 
+      // 检查是否有国际机票数据并添加工作表
+      if (
+        companyGroup.internationalFlightInfo &&
+        allSheetData.value.internationalFlight
+      ) {
+        const internationalFlightData = allSheetData.value.internationalFlight;
+        const departmentKeyword = "乘机人部门";
+        const departmentColumnIndex = (
+          internationalFlightData[2] as any[]
+        ).findIndex(
+          (cell: any) => cell && cell.toString().includes(departmentKeyword)
+        );
+
+        if (departmentColumnIndex !== -1) {
+          const newWorksheet = newWorkbook.addWorksheet("国际机票", {
+            views: [{ showGridLines: true }]
+          });
+          newWorksheet.properties.defaultRowHeight = 40;
+
+          // 筛选该公司的国际机票数据
+          const companyInternationalFlightData = internationalFlightData
+            .slice(3)
+            .filter((row: any[], index: number) => {
+              const departmentValue = row[departmentColumnIndex];
+              if (!departmentValue) return false;
+
+              const departmentText = departmentValue.toString();
+
+              // 过滤掉合计行、总计行等非数据行
+              const summaryKeywords = [
+                "合计",
+                "总计",
+                "总和",
+                "小计",
+                "sum",
+                "total",
+                "summary"
+              ];
+              const isSummaryRow = summaryKeywords.some(keyword =>
+                departmentText.toLowerCase().includes(keyword.toLowerCase())
+              );
+
+              // 过滤纯数字（可能是金额合计）
+              const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+
+              // 过滤空值、特殊字符
+              const isEmptyOrSpecial =
+                departmentText.trim() === "" ||
+                /^[\-_=+]+$/.test(departmentText.trim()) ||
+                departmentText.length < 2;
+
+              if (isSummaryRow || isPureNumber || isEmptyOrSpecial)
+                return false;
+
+              // 获取分组名称进行匹配
+              let groupName: string;
+              if (departmentText.includes("-")) {
+                groupName = departmentText.split("-")[0].trim();
+              } else {
+                groupName = departmentText.trim();
+              }
+
+              return groupName === companyGroup.groupName;
+            });
+
+          // 复制原始前三行
+          const headerRows = internationalFlightData.slice(0, 3);
+          const newData = [...headerRows, ...companyInternationalFlightData];
+
+          console.log(`  国际机票工作表: ${newData.length} 行数据`);
+
+          // 应用样式和格式
+          await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
+        }
+      }
+
+      // 在所有工作表处理完成后，处理第九行的总计金额替换
+      console.log(`===== 开始处理第九行总计金额替换 =====`);
+
+      // 检查结算单工作表的第九行是否包含"国内机票"
+      if (summaryWorksheet) {
+        const ninthRow = summaryWorksheet.getRow(9);
+        if (ninthRow) {
+          console.log(`检查结算单第九行数据...`);
+
+          // 遍历第九行的每个单元格，查找"国内机票"
+          let domesticFlightColIndex = -1;
+          for (let col = 1; col <= 50; col++) {
+            // 检查前50列
+            const cell = ninthRow.getCell(col);
+            if (cell.value === "国内机票") {
+              domesticFlightColIndex = col;
+              console.log(`在第${col}列找到"国内机票"`);
+              break;
+            }
+          }
+
+          if (domesticFlightColIndex !== -1) {
+            console.log(
+              `发现国内机票数据，开始从拆分好的工作表中查找合计金额`,
+              newWorkbook
+            );
+
+            // 从新创建的工作簿中查找国内机票工作表
+            const domesticFlightWorksheet =
+              newWorkbook.getWorksheet("国内机票");
+            if (domesticFlightWorksheet) {
+              console.log(`找到拆分好的国内机票工作表`);
+
+              // 获取工作表的所有数据
+              const domesticFlightData: any[][] = [];
+              domesticFlightWorksheet.eachRow((row, rowNumber) => {
+                const rowData: any[] = [];
+                row.eachCell((cell, colNumber) => {
+                  rowData[colNumber] = cell.value;
+                });
+                domesticFlightData[rowNumber] = rowData;
+              });
+
+              console.log(`国内机票工作表共${domesticFlightData.length}行数据`);
+
+              // 查找合计行
+              let totalAmount = null;
+              for (let i = domesticFlightData.length - 1; i >= 0; i--) {
+                const row = domesticFlightData[i];
+                // 检查这一行是否包含"合计"或数字
+                const hasTotalText = row.some(
+                  cell => typeof cell === "string" && cell.includes("合计")
+                );
+                const hasNumbers = row.some(
+                  cell =>
+                    typeof cell === "number" ||
+                    (typeof cell === "string" && /^\d+\.?\d*$/.test(cell))
+                );
+
+                if (hasTotalText || hasNumbers) {
+                  console.log(`找到合计行（第${i + 1}行）:`, row);
+
+                  // 查找合计行中的数字（最后一个数字是合计金额）
+                  for (let j = row.length - 1; j >= 0; j--) {
+                    const cell = row[j];
+                    if (typeof cell === "number") {
+                      totalAmount = cell;
+                      break;
+                    } else if (
+                      typeof cell === "string" &&
+                      /^\d+\.?\d*$/.test(cell)
+                    ) {
+                      totalAmount = parseFloat(cell);
+                      break;
+                    }
+                  }
+                  break;
+                }
+              }
+
+              if (totalAmount !== null) {
+                console.log(`找到合计金额: ${totalAmount}`);
+
+                // 替换第九行中国内机票对应的总计金额
+                // 根据数据结构 [empty × 3, '国内机票', 5730, 5730, 75, 5805]
+                // '国内机票'在第4列，5805应该在第8列
+                console.log(`国内机票在第${domesticFlightColIndex}列，开始查找总计金额列`);
+
+                // 打印第九行的完整数据进行调试
+                console.log(`第九行完整数据:`);
+                for (let debugCol = 1; debugCol <= 20; debugCol++) {
+                  const debugCell = ninthRow.getCell(debugCol);
+                  if (debugCell.value !== null && debugCell.value !== undefined) {
+                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  }
+                }
+
+                // 查找国内机票后面的所有数字列，找到最后一个数字列作为总计金额
+                let allNumberCols: {col: number, value: any}[] = [];
+                for (let searchCol = domesticFlightColIndex + 1; searchCol <= 20; searchCol++) {
+                  const searchCell = ninthRow.getCell(searchCol);
+                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                    // 检查是否是数字
+                    if (typeof searchCell.value === 'number') {
+                      allNumberCols.push({col: searchCol, value: searchCell.value});
+                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
+                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
+                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
+                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    }
+                  }
+                }
+
+                // 使用最后一个数字列作为总计金额列
+                let targetColIndex = -1;
+                if (allNumberCols.length > 0) {
+                  const lastNumberCol = allNumberCols[allNumberCols.length - 1];
+                  targetColIndex = lastNumberCol.col;
+                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                }
+
+                if (targetColIndex !== -1) {
+                  const targetCell = ninthRow.getCell(targetColIndex);
+                  const oldValue = targetCell.value;
+                  targetCell.value = totalAmount;
+                  console.log(
+                    `替换第九行第${targetColIndex}列: ${oldValue} -> ${totalAmount}`
+                  );
+                } else {
+                  console.log(`未找到第九行中的总计金额列，请检查数据结构`);
+                }
+              } else {
+                console.log(`未在拆分好的国内机票工作表中找到有效的合计金额`);
+              }
+            } else {
+              console.log(`新工作簿中没有找到国内机票工作表`);
+            }
+          } else {
+            console.log(`第九行中未找到"国内机票"数据`);
+          }
+        } else {
+          console.log(`结算单工作表中没有第九行数据`);
+        }
+      } else {
+        console.log(`未找到结算单工作表`);
+      }
+
+      console.log(`===== 第九行总计金额替换处理结束 =====`);
+
+      // 处理第十行的国际机票总计金额替换
+      console.log(`===== 开始处理第十行国际机票总计金额替换 =====`);
+
+      // 检查结算单工作表的第十行是否包含"国际机票"
+      if (summaryWorksheet) {
+        const tenthRow = summaryWorksheet.getRow(10);
+        if (tenthRow) {
+          console.log(`检查结算单第十行数据...`);
+
+          // 遍历第十行的每个单元格，查找"国际机票"
+          let internationalFlightColIndex = -1;
+          for (let col = 1; col <= 50; col++) {
+            // 检查前50列
+            const cell = tenthRow.getCell(col);
+            if (cell.value === "国际机票") {
+              internationalFlightColIndex = col;
+              console.log(`在第${col}列找到"国际机票"`);
+              break;
+            }
+          }
+
+          if (internationalFlightColIndex !== -1) {
+            console.log(
+              `发现国际机票数据，开始从拆分好的工作表中查找合计金额`
+            );
+
+            // 从新创建的工作簿中查找国际机票工作表
+            const internationalFlightWorksheet = newWorkbook.getWorksheet("国际机票");
+            if (internationalFlightWorksheet) {
+              console.log(`找到拆分好的国际机票工作表`);
+
+              // 获取工作表的所有数据
+              const internationalFlightData: any[][] = [];
+              internationalFlightWorksheet.eachRow((row, rowNumber) => {
+                const rowData: any[] = [];
+                row.eachCell((cell, colNumber) => {
+                  rowData[colNumber] = cell.value;
+                });
+                internationalFlightData[rowNumber] = rowData;
+              });
+
+              console.log(
+                `国际机票工作表共${internationalFlightData.length}行数据`
+              );
+
+              // 查找合计行
+              let totalAmount = null;
+              for (let i = internationalFlightData.length - 1; i >= 0; i--) {
+                const row = internationalFlightData[i];
+                // 检查这一行是否包含"合计"或数字
+                const hasTotalText = row.some(
+                  cell => typeof cell === "string" && cell.includes("合计")
+                );
+                const hasNumbers = row.some(
+                  cell =>
+                    typeof cell === "number" ||
+                    (typeof cell === "string" && /^\d+\.?\d*$/.test(cell))
+                );
+
+                if (hasTotalText || hasNumbers) {
+                  console.log(`找到合计行（第${i + 1}行）:`, row);
+
+                  // 查找合计行中的数字（最后一个数字是合计金额）
+                  for (let j = row.length - 1; j >= 0; j--) {
+                    const cell = row[j];
+                    if (typeof cell === "number") {
+                      totalAmount = cell;
+                      break;
+                    } else if (
+                      typeof cell === "string" &&
+                      /^\d+\.?\d*$/.test(cell)
+                    ) {
+                      totalAmount = parseFloat(cell);
+                      break;
+                    }
+                  }
+                  break;
+                }
+              }
+
+              if (totalAmount !== null) {
+                console.log(`找到合计金额: ${totalAmount}`);
+
+                // 替换第十行中国际机票对应的总计金额
+                console.log(`国际机票在第${internationalFlightColIndex}列，开始查找总计金额列`);
+
+                // 打印第十行的完整数据进行调试
+                console.log(`第十行完整数据:`);
+                for (let debugCol = 1; debugCol <= 20; debugCol++) {
+                  const debugCell = tenthRow.getCell(debugCol);
+                  if (debugCell.value !== null && debugCell.value !== undefined) {
+                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  }
+                }
+
+                // 查找国际机票后面的所有数字列，找到最后一个数字列作为总计金额
+                let allNumberCols: {col: number, value: any}[] = [];
+                for (let searchCol = internationalFlightColIndex + 1; searchCol <= 20; searchCol++) {
+                  const searchCell = tenthRow.getCell(searchCol);
+                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                    // 检查是否是数字
+                    if (typeof searchCell.value === 'number') {
+                      allNumberCols.push({col: searchCol, value: searchCell.value});
+                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
+                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
+                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
+                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    }
+                  }
+                }
+
+                // 使用最后一个数字列作为总计金额列
+                let targetColIndex = -1;
+                if (allNumberCols.length > 0) {
+                  const lastNumberCol = allNumberCols[allNumberCols.length - 1];
+                  targetColIndex = lastNumberCol.col;
+                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                }
+
+                if (targetColIndex !== -1) {
+                  const targetCell = tenthRow.getCell(targetColIndex);
+                  const oldValue = targetCell.value;
+                  targetCell.value = totalAmount;
+                  console.log(
+                    `替换第十行第${targetColIndex}列: ${oldValue} -> ${totalAmount}`
+                  );
+                } else {
+                  console.log(`未找到第十行中的总计金额列，请检查数据结构`);
+                }
+              } else {
+                console.log(`未在拆分好的国际机票工作表中找到有效的合计金额`);
+              }
+            } else {
+              console.log(`新工作簿中没有找到国际机票工作表`);
+            }
+          } else {
+            console.log(`第十行中未找到"国际机票"数据`);
+          }
+        } else {
+          console.log(`结算单工作表中没有第十行数据`);
+        }
+      } else {
+        console.log(`未找到结算单工作表`);
+      }
+
+      console.log(`===== 第十行国际机票总计金额替换处理结束 =====`);
+
+      // 处理第十一行的国内酒店总计金额替换
+      console.log(`===== 开始处理第十一行国内酒店总计金额替换 =====`);
+
+      // 检查结算单工作表的第十一行是否包含"国内酒店"
+      if (summaryWorksheet) {
+        const eleventhRow = summaryWorksheet.getRow(11);
+        if (eleventhRow) {
+          console.log(`检查结算单第十一行数据...`);
+
+          // 遍历第十一行的每个单元格，查找"国内酒店"
+          let domesticHotelColIndex = -1;
+          for (let col = 1; col <= 50; col++) {
+            // 检查前50列
+            const cell = eleventhRow.getCell(col);
+            if (cell.value === "国内酒店") {
+              domesticHotelColIndex = col;
+              console.log(`在第${col}列找到"国内酒店"`);
+              break;
+            }
+          }
+
+          if (domesticHotelColIndex !== -1) {
+            console.log(
+              `发现国内酒店数据，开始从拆分好的工作表中查找合计金额`
+            );
+
+            // 从新创建的工作簿中查找国内酒店工作表
+            const domesticHotelWorksheet = newWorkbook.getWorksheet("国内酒店");
+            if (domesticHotelWorksheet) {
+              console.log(`找到拆分好的国内酒店工作表`);
+
+              // 获取工作表的所有数据
+              const domesticHotelData: any[][] = [];
+              domesticHotelWorksheet.eachRow((row, rowNumber) => {
+                const rowData: any[] = [];
+                row.eachCell((cell, colNumber) => {
+                  rowData[colNumber] = cell.value;
+                });
+                domesticHotelData[rowNumber] = rowData;
+              });
+
+              console.log(
+                `国内酒店工作表共${domesticHotelData.length}行数据`
+              );
+
+              // 查找合计行
+              let totalAmount = null;
+              for (let i = domesticHotelData.length - 1; i >= 0; i--) {
+                const row = domesticHotelData[i];
+                // 检查这一行是否包含"合计"或数字
+                const hasTotalText = row.some(
+                  cell => typeof cell === "string" && cell.includes("合计")
+                );
+                const hasNumbers = row.some(
+                  cell =>
+                    typeof cell === "number" ||
+                    (typeof cell === "string" && /^\d+\.?\d*$/.test(cell))
+                );
+
+                if (hasTotalText || hasNumbers) {
+                  console.log(`找到合计行（第${i + 1}行）:`, row);
+
+                  // 查找合计行中的数字（最后一个数字是合计金额）
+                  for (let j = row.length - 1; j >= 0; j--) {
+                    const cell = row[j];
+                    if (typeof cell === "number") {
+                      totalAmount = cell;
+                      break;
+                    } else if (
+                      typeof cell === "string" &&
+                      /^\d+\.?\d*$/.test(cell)
+                    ) {
+                      totalAmount = parseFloat(cell);
+                      break;
+                    }
+                  }
+                  break;
+                }
+              }
+
+              if (totalAmount !== null) {
+                console.log(`找到合计金额: ${totalAmount}`);
+
+                // 替换第十一行中国内酒店对应的总计金额
+                console.log(`国内酒店在第${domesticHotelColIndex}列，开始查找总计金额列`);
+
+                // 打印第十一行的完整数据进行调试
+                console.log(`第十一行完整数据:`);
+                for (let debugCol = 1; debugCol <= 20; debugCol++) {
+                  const debugCell = eleventhRow.getCell(debugCol);
+                  if (debugCell.value !== null && debugCell.value !== undefined) {
+                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  }
+                }
+
+                // 查找国内酒店后面的所有数字列，找到最后一个数字列作为总计金额
+                let allNumberCols: {col: number, value: any}[] = [];
+                for (let searchCol = domesticHotelColIndex + 1; searchCol <= 20; searchCol++) {
+                  const searchCell = eleventhRow.getCell(searchCol);
+                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                    // 检查是否是数字
+                    if (typeof searchCell.value === 'number') {
+                      allNumberCols.push({col: searchCol, value: searchCell.value});
+                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
+                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
+                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
+                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    }
+                  }
+                }
+
+                // 使用最后一个数字列作为总计金额列
+                let targetColIndex = -1;
+                if (allNumberCols.length > 0) {
+                  const lastNumberCol = allNumberCols[allNumberCols.length - 1];
+                  targetColIndex = lastNumberCol.col;
+                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                }
+
+                if (targetColIndex !== -1) {
+                  const targetCell = eleventhRow.getCell(targetColIndex);
+                  const oldValue = targetCell.value;
+                  targetCell.value = totalAmount;
+                  console.log(
+                    `替换第十一行第${targetColIndex}列: ${oldValue} -> ${totalAmount}`
+                  );
+                } else {
+                  console.log(`未找到第十一行中的总计金额列，请检查数据结构`);
+                }
+              } else {
+                console.log(`未在拆分好的国内酒店工作表中找到有效的合计金额`);
+              }
+            } else {
+              console.log(`新工作簿中没有找到国内酒店工作表`);
+            }
+          } else {
+            console.log(`第十一行中未找到"国内酒店"数据`);
+          }
+        } else {
+          console.log(`结算单工作表中没有第十一行数据`);
+        }
+      } else {
+        console.log(`未找到结算单工作表`);
+      }
+
+      console.log(`===== 第十一行国内酒店总计金额替换处理结束 =====`);
+
+      // 处理第十二行的国际酒店总计金额替换
+      console.log(`===== 开始处理第十二行国际酒店总计金额替换 =====`);
+
+      // 检查结算单工作表的第十二行是否包含"国际酒店"
+      if (summaryWorksheet) {
+        const twelfthRow = summaryWorksheet.getRow(12);
+        if (twelfthRow) {
+          console.log(`检查结算单第十二行数据...`);
+
+          // 遍历第十二行的每个单元格，查找"国际酒店"
+          let internationalHotelColIndex = -1;
+          for (let col = 1; col <= 50; col++) {
+            // 检查前50列
+            const cell = twelfthRow.getCell(col);
+            if (cell.value === "国际酒店") {
+              internationalHotelColIndex = col;
+              console.log(`在第${col}列找到"国际酒店"`);
+              break;
+            }
+          }
+
+          if (internationalHotelColIndex !== -1) {
+            console.log(
+              `发现国际酒店数据，开始从拆分好的工作表中查找合计金额`
+            );
+
+            // 从新创建的工作簿中查找国际酒店工作表
+            const internationalHotelWorksheet = newWorkbook.getWorksheet("国际酒店");
+            if (internationalHotelWorksheet) {
+              console.log(`找到拆分好的国际酒店工作表`);
+
+              // 获取工作表的所有数据
+              const internationalHotelData: any[][] = [];
+              internationalHotelWorksheet.eachRow((row, rowNumber) => {
+                const rowData: any[] = [];
+                row.eachCell((cell, colNumber) => {
+                  rowData[colNumber] = cell.value;
+                });
+                internationalHotelData[rowNumber] = rowData;
+              });
+
+              console.log(
+                `国际酒店工作表共${internationalHotelData.length}行数据`
+              );
+
+              // 查找合计行
+              let totalAmount = null;
+              for (let i = internationalHotelData.length - 1; i >= 0; i--) {
+                const row = internationalHotelData[i];
+                // 检查这一行是否包含"合计"或数字
+                const hasTotalText = row.some(
+                  cell => typeof cell === "string" && cell.includes("合计")
+                );
+                const hasNumbers = row.some(
+                  cell =>
+                    typeof cell === "number" ||
+                    (typeof cell === "string" && /^\d+\.?\d*$/.test(cell))
+                );
+
+                if (hasTotalText || hasNumbers) {
+                  console.log(`找到合计行（第${i + 1}行）:`, row);
+
+                  // 查找合计行中的数字（最后一个数字是合计金额）
+                  for (let j = row.length - 1; j >= 0; j--) {
+                    const cell = row[j];
+                    if (typeof cell === "number") {
+                      totalAmount = cell;
+                      break;
+                    } else if (
+                      typeof cell === "string" &&
+                      /^\d+\.?\d*$/.test(cell)
+                    ) {
+                      totalAmount = parseFloat(cell);
+                      break;
+                    }
+                  }
+                  break;
+                }
+              }
+
+              if (totalAmount !== null) {
+                console.log(`找到合计金额: ${totalAmount}`);
+
+                // 替换第十二行中国际酒店对应的总计金额
+                console.log(`国际酒店在第${internationalHotelColIndex}列，开始查找总计金额列`);
+
+                // 打印第十二行的完整数据进行调试
+                console.log(`第十二行完整数据:`);
+                for (let debugCol = 1; debugCol <= 20; debugCol++) {
+                  const debugCell = twelfthRow.getCell(debugCol);
+                  if (debugCell.value !== null && debugCell.value !== undefined) {
+                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  }
+                }
+
+                // 查找国际酒店后面的所有数字列，找到最后一个数字列作为总计金额
+                let allNumberCols: {col: number, value: any}[] = [];
+                for (let searchCol = internationalHotelColIndex + 1; searchCol <= 20; searchCol++) {
+                  const searchCell = twelfthRow.getCell(searchCol);
+                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                    // 检查是否是数字
+                    if (typeof searchCell.value === 'number') {
+                      allNumberCols.push({col: searchCol, value: searchCell.value});
+                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
+                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
+                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
+                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    }
+                  }
+                }
+
+                // 使用最后一个数字列作为总计金额列
+                let targetColIndex = -1;
+                if (allNumberCols.length > 0) {
+                  const lastNumberCol = allNumberCols[allNumberCols.length - 1];
+                  targetColIndex = lastNumberCol.col;
+                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                }
+
+                if (targetColIndex !== -1) {
+                  const targetCell = twelfthRow.getCell(targetColIndex);
+                  const oldValue = targetCell.value;
+                  targetCell.value = totalAmount;
+                  console.log(
+                    `替换第十二行第${targetColIndex}列: ${oldValue} -> ${totalAmount}`
+                  );
+                } else {
+                  console.log(`未找到第十二行中的总计金额列，请检查数据结构`);
+                }
+              } else {
+                console.log(`未在拆分好的国际酒店工作表中找到有效的合计金额`);
+              }
+            } else {
+              console.log(`新工作簿中没有找到国际酒店工作表`);
+            }
+          } else {
+            console.log(`第十二行中未找到"国际酒店"数据`);
+          }
+        } else {
+          console.log(`结算单工作表中没有第十二行数据`);
+        }
+      } else {
+        console.log(`未找到结算单工作表`);
+      }
+
+      console.log(`===== 第十二行国际酒店总计金额替换处理结束 =====`);
+
+      // 处理第十三行的国内火车总计金额替换
+      console.log(`===== 开始处理第十三行国内火车总计金额替换 =====`);
+
+      // 检查结算单工作表的第十三行是否包含"国内火车"
+      if (summaryWorksheet) {
+        const thirteenthRow = summaryWorksheet.getRow(13);
+        if (thirteenthRow) {
+          console.log(`检查结算单第十三行数据...`);
+
+          // 遍历第十三行的每个单元格，查找"国内火车"
+          let domesticTrainColIndex = -1;
+          for (let col = 1; col <= 50; col++) {
+            // 检查前50列
+            const cell = thirteenthRow.getCell(col);
+            if (cell.value === "国内火车") {
+              domesticTrainColIndex = col;
+              console.log(`在第${col}列找到"国内火车"`);
+              break;
+            }
+          }
+
+          if (domesticTrainColIndex !== -1) {
+            console.log(
+              `发现国内火车数据，开始从拆分好的工作表中查找合计金额`
+            );
+
+            // 从新创建的工作簿中查找火车票工作表
+            const trainWorksheet = newWorkbook.getWorksheet("火车票");
+            if (trainWorksheet) {
+              console.log(`找到拆分好的火车票工作表`);
+
+              // 获取工作表的所有数据
+              const trainData: any[][] = [];
+              trainWorksheet.eachRow((row, rowNumber) => {
+                const rowData: any[] = [];
+                row.eachCell((cell, colNumber) => {
+                  rowData[colNumber] = cell.value;
+                });
+                trainData[rowNumber] = rowData;
+              });
+
+              console.log(
+                `火车票工作表共${trainData.length}行数据`
+              );
+
+              // 查找合计行
+              let totalAmount = null;
+              for (let i = trainData.length - 1; i >= 0; i--) {
+                const row = trainData[i];
+                // 检查这一行是否包含"合计"或数字
+                const hasTotalText = row.some(
+                  cell => typeof cell === "string" && cell.includes("合计")
+                );
+                const hasNumbers = row.some(
+                  cell =>
+                    typeof cell === "number" ||
+                    (typeof cell === "string" && /^\d+\.?\d*$/.test(cell))
+                );
+
+                if (hasTotalText || hasNumbers) {
+                  console.log(`找到合计行（第${i + 1}行）:`, row);
+
+                  // 查找合计行中的数字（最后一个数字是合计金额）
+                  for (let j = row.length - 1; j >= 0; j--) {
+                    const cell = row[j];
+                    if (typeof cell === "number") {
+                      totalAmount = cell;
+                      break;
+                    } else if (
+                      typeof cell === "string" &&
+                      /^\d+\.?\d*$/.test(cell)
+                    ) {
+                      totalAmount = parseFloat(cell);
+                      break;
+                    }
+                  }
+                  break;
+                }
+              }
+
+              if (totalAmount !== null) {
+                console.log(`找到合计金额: ${totalAmount}`);
+
+                // 替换第十三行中国内火车对应的总计金额
+                console.log(`国内火车在第${domesticTrainColIndex}列，开始查找总计金额列`);
+
+                // 打印第十三行的完整数据进行调试
+                console.log(`第十三行完整数据:`);
+                for (let debugCol = 1; debugCol <= 20; debugCol++) {
+                  const debugCell = thirteenthRow.getCell(debugCol);
+                  if (debugCell.value !== null && debugCell.value !== undefined) {
+                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  }
+                }
+
+                // 查找国内火车后面的所有数字列，找到最后一个数字列作为总计金额
+                let allNumberCols: {col: number, value: any}[] = [];
+                for (let searchCol = domesticTrainColIndex + 1; searchCol <= 20; searchCol++) {
+                  const searchCell = thirteenthRow.getCell(searchCol);
+                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                    // 检查是否是数字
+                    if (typeof searchCell.value === 'number') {
+                      allNumberCols.push({col: searchCol, value: searchCell.value});
+                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
+                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
+                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
+                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    }
+                  }
+                }
+
+                // 使用最后一个数字列作为总计金额列
+                let targetColIndex = -1;
+                if (allNumberCols.length > 0) {
+                  const lastNumberCol = allNumberCols[allNumberCols.length - 1];
+                  targetColIndex = lastNumberCol.col;
+                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                }
+
+                if (targetColIndex !== -1) {
+                  const targetCell = thirteenthRow.getCell(targetColIndex);
+                  const oldValue = targetCell.value;
+                  targetCell.value = totalAmount;
+                  console.log(
+                    `替换第十三行第${targetColIndex}列: ${oldValue} -> ${totalAmount}`
+                  );
+                } else {
+                  console.log(`未找到第十三行中的总计金额列，请检查数据结构`);
+                }
+              } else {
+                console.log(`未在拆分好的火车票工作表中找到有效的合计金额`);
+              }
+            } else {
+              console.log(`新工作簿中没有找到火车票工作表`);
+            }
+          } else {
+            console.log(`第十三行中未找到"国内火车"数据`);
+          }
+        } else {
+          console.log(`结算单工作表中没有第十三行数据`);
+        }
+      } else {
+        console.log(`未找到结算单工作表`);
+      }
+
+      console.log(`===== 第十三行国内火车总计金额替换处理结束 =====`);
+
       // 生成Excel文件内容
       const excelBuffer = await newWorkbook.xlsx.writeBuffer();
 
       // 使用用户编辑的文件名
-      const finalFileName = companyGroup.editableFileName.endsWith(".xlsx")
-        ? companyGroup.editableFileName
-        : `${companyGroup.editableFileName}.xlsx`;
+      const finalFileName = latestFileName.endsWith(".xlsx")
+        ? latestFileName
+        : `${latestFileName}.xlsx`;
 
       console.log(`使用文件名: ${finalFileName}`);
       zip.file(finalFileName, excelBuffer);
@@ -992,11 +2402,24 @@ const generateGroupedExcelFiles = async () => {
         <div class="data-table">
           <el-table :data="getGroupInfo()" border style="width: 100%">
             <el-table-column prop="groupName" label="公司名称" width="200" />
-            <el-table-column label="酒店明细" width="150">
+            <el-table-column label="酒店明细(国内)" width="150">
               <template #default="scope">
                 <div v-if="scope.row.hotelInfo">
                   <div>{{ scope.row.hotelInfo.count }} 条</div>
-                  <div class="text-gray-500 text-sm">{{ scope.row.hotelInfo.rowRange }}</div>
+                  <div class="text-gray-500 text-sm">
+                    {{ scope.row.hotelInfo.rowRange }}
+                  </div>
+                </div>
+                <div v-else class="text-gray-400">无数据</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="酒店明细(国际)" width="150">
+              <template #default="scope">
+                <div v-if="scope.row.internationalHotelInfo">
+                  <div>{{ scope.row.internationalHotelInfo.count }} 条</div>
+                  <div class="text-gray-500 text-sm">
+                    {{ scope.row.internationalHotelInfo.rowRange }}
+                  </div>
                 </div>
                 <div v-else class="text-gray-400">无数据</div>
               </template>
@@ -1005,16 +2428,31 @@ const generateGroupedExcelFiles = async () => {
               <template #default="scope">
                 <div v-if="scope.row.trainInfo">
                   <div>{{ scope.row.trainInfo.count }} 条</div>
-                  <div class="text-gray-500 text-sm">{{ scope.row.trainInfo.rowRange }}</div>
+                  <div class="text-gray-500 text-sm">
+                    {{ scope.row.trainInfo.rowRange }}
+                  </div>
                 </div>
                 <div v-else class="text-gray-400">无数据</div>
               </template>
             </el-table-column>
-            <el-table-column label="机票明细" width="150">
+            <el-table-column label="机票明细(国内)" width="150">
               <template #default="scope">
                 <div v-if="scope.row.flightInfo">
                   <div>{{ scope.row.flightInfo.count }} 条</div>
-                  <div class="text-gray-500 text-sm">{{ scope.row.flightInfo.rowRange }}</div>
+                  <div class="text-gray-500 text-sm">
+                    {{ scope.row.flightInfo.rowRange }}
+                  </div>
+                </div>
+                <div v-else class="text-gray-400">无数据</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="机票明细(国际)" width="150">
+              <template #default="scope">
+                <div v-if="scope.row.internationalFlightInfo">
+                  <div>{{ scope.row.internationalFlightInfo.count }} 条</div>
+                  <div class="text-gray-500 text-sm">
+                    {{ scope.row.internationalFlightInfo.rowRange }}
+                  </div>
                 </div>
                 <div v-else class="text-gray-400">无数据</div>
               </template>
