@@ -3,7 +3,10 @@
     "allow": [
       "Bash(pnpm:*)",
       "Bash(npm run typecheck:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(ping:*)",
+      "Bash(git push:*)",
+      "Bash(nslookup:*)"
     ],
     "deny": [],
     "ask": []
