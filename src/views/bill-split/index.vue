@@ -1651,29 +1651,56 @@ const generateGroupedExcelFiles = async () => {
                 // 替换第九行中国内机票对应的总计金额
                 // 根据数据结构 [empty × 3, '国内机票', 5730, 5730, 75, 5805]
                 // '国内机票'在第4列，5805应该在第8列
-                console.log(`国内机票在第${domesticFlightColIndex}列，开始查找总计金额列`);
+                console.log(
+                  `国内机票在第${domesticFlightColIndex}列，开始查找总计金额列`
+                );
 
                 // 打印第九行的完整数据进行调试
                 console.log(`第九行完整数据:`);
                 for (let debugCol = 1; debugCol <= 20; debugCol++) {
                   const debugCell = ninthRow.getCell(debugCol);
-                  if (debugCell.value !== null && debugCell.value !== undefined) {
-                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  if (
+                    debugCell.value !== null &&
+                    debugCell.value !== undefined
+                  ) {
+                    console.log(
+                      `  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`
+                    );
                   }
                 }
 
                 // 查找国内机票后面的所有数字列，找到最后一个数字列作为总计金额
-                let allNumberCols: {col: number, value: any}[] = [];
-                for (let searchCol = domesticFlightColIndex + 1; searchCol <= 20; searchCol++) {
+                let allNumberCols: { col: number; value: any }[] = [];
+                for (
+                  let searchCol = domesticFlightColIndex + 1;
+                  searchCol <= 20;
+                  searchCol++
+                ) {
                   const searchCell = ninthRow.getCell(searchCol);
-                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                  if (
+                    searchCell.value !== null &&
+                    searchCell.value !== undefined
+                  ) {
                     // 检查是否是数字
-                    if (typeof searchCell.value === 'number') {
-                      allNumberCols.push({col: searchCol, value: searchCell.value});
-                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
-                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
-                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
-                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    if (typeof searchCell.value === "number") {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: searchCell.value
+                      });
+                      console.log(
+                        `找到数字列: 第${searchCol}列 = ${searchCell.value}`
+                      );
+                    } else if (
+                      typeof searchCell.value === "string" &&
+                      /^\d+\.?\d*$/.test(searchCell.value)
+                    ) {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: parseFloat(searchCell.value)
+                      });
+                      console.log(
+                        `找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`
+                      );
                     }
                   }
                 }
@@ -1683,7 +1710,9 @@ const generateGroupedExcelFiles = async () => {
                 if (allNumberCols.length > 0) {
                   const lastNumberCol = allNumberCols[allNumberCols.length - 1];
                   targetColIndex = lastNumberCol.col;
-                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                  console.log(
+                    `选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`
+                  );
                 }
 
                 if (targetColIndex !== -1) {
@@ -1736,12 +1765,11 @@ const generateGroupedExcelFiles = async () => {
           }
 
           if (internationalFlightColIndex !== -1) {
-            console.log(
-              `发现国际机票数据，开始从拆分好的工作表中查找合计金额`
-            );
+            console.log(`发现国际机票数据，开始从拆分好的工作表中查找合计金额`);
 
             // 从新创建的工作簿中查找国际机票工作表
-            const internationalFlightWorksheet = newWorkbook.getWorksheet("国际机票");
+            const internationalFlightWorksheet =
+              newWorkbook.getWorksheet("国际机票");
             if (internationalFlightWorksheet) {
               console.log(`找到拆分好的国际机票工作表`);
 
@@ -1798,29 +1826,56 @@ const generateGroupedExcelFiles = async () => {
                 console.log(`找到合计金额: ${totalAmount}`);
 
                 // 替换第十行中国际机票对应的总计金额
-                console.log(`国际机票在第${internationalFlightColIndex}列，开始查找总计金额列`);
+                console.log(
+                  `国际机票在第${internationalFlightColIndex}列，开始查找总计金额列`
+                );
 
                 // 打印第十行的完整数据进行调试
                 console.log(`第十行完整数据:`);
                 for (let debugCol = 1; debugCol <= 20; debugCol++) {
                   const debugCell = tenthRow.getCell(debugCol);
-                  if (debugCell.value !== null && debugCell.value !== undefined) {
-                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  if (
+                    debugCell.value !== null &&
+                    debugCell.value !== undefined
+                  ) {
+                    console.log(
+                      `  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`
+                    );
                   }
                 }
 
                 // 查找国际机票后面的所有数字列，找到最后一个数字列作为总计金额
-                let allNumberCols: {col: number, value: any}[] = [];
-                for (let searchCol = internationalFlightColIndex + 1; searchCol <= 20; searchCol++) {
+                let allNumberCols: { col: number; value: any }[] = [];
+                for (
+                  let searchCol = internationalFlightColIndex + 1;
+                  searchCol <= 20;
+                  searchCol++
+                ) {
                   const searchCell = tenthRow.getCell(searchCol);
-                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                  if (
+                    searchCell.value !== null &&
+                    searchCell.value !== undefined
+                  ) {
                     // 检查是否是数字
-                    if (typeof searchCell.value === 'number') {
-                      allNumberCols.push({col: searchCol, value: searchCell.value});
-                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
-                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
-                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
-                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    if (typeof searchCell.value === "number") {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: searchCell.value
+                      });
+                      console.log(
+                        `找到数字列: 第${searchCol}列 = ${searchCell.value}`
+                      );
+                    } else if (
+                      typeof searchCell.value === "string" &&
+                      /^\d+\.?\d*$/.test(searchCell.value)
+                    ) {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: parseFloat(searchCell.value)
+                      });
+                      console.log(
+                        `找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`
+                      );
                     }
                   }
                 }
@@ -1830,7 +1885,9 @@ const generateGroupedExcelFiles = async () => {
                 if (allNumberCols.length > 0) {
                   const lastNumberCol = allNumberCols[allNumberCols.length - 1];
                   targetColIndex = lastNumberCol.col;
-                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                  console.log(
+                    `选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`
+                  );
                 }
 
                 if (targetColIndex !== -1) {
@@ -1883,9 +1940,7 @@ const generateGroupedExcelFiles = async () => {
           }
 
           if (domesticHotelColIndex !== -1) {
-            console.log(
-              `发现国内酒店数据，开始从拆分好的工作表中查找合计金额`
-            );
+            console.log(`发现国内酒店数据，开始从拆分好的工作表中查找合计金额`);
 
             // 从新创建的工作簿中查找国内酒店工作表
             const domesticHotelWorksheet = newWorkbook.getWorksheet("国内酒店");
@@ -1902,9 +1957,7 @@ const generateGroupedExcelFiles = async () => {
                 domesticHotelData[rowNumber] = rowData;
               });
 
-              console.log(
-                `国内酒店工作表共${domesticHotelData.length}行数据`
-              );
+              console.log(`国内酒店工作表共${domesticHotelData.length}行数据`);
 
               // 查找合计行
               let totalAmount = null;
@@ -1945,29 +1998,56 @@ const generateGroupedExcelFiles = async () => {
                 console.log(`找到合计金额: ${totalAmount}`);
 
                 // 替换第十一行中国内酒店对应的总计金额
-                console.log(`国内酒店在第${domesticHotelColIndex}列，开始查找总计金额列`);
+                console.log(
+                  `国内酒店在第${domesticHotelColIndex}列，开始查找总计金额列`
+                );
 
                 // 打印第十一行的完整数据进行调试
                 console.log(`第十一行完整数据:`);
                 for (let debugCol = 1; debugCol <= 20; debugCol++) {
                   const debugCell = eleventhRow.getCell(debugCol);
-                  if (debugCell.value !== null && debugCell.value !== undefined) {
-                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  if (
+                    debugCell.value !== null &&
+                    debugCell.value !== undefined
+                  ) {
+                    console.log(
+                      `  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`
+                    );
                   }
                 }
 
                 // 查找国内酒店后面的所有数字列，找到最后一个数字列作为总计金额
-                let allNumberCols: {col: number, value: any}[] = [];
-                for (let searchCol = domesticHotelColIndex + 1; searchCol <= 20; searchCol++) {
+                let allNumberCols: { col: number; value: any }[] = [];
+                for (
+                  let searchCol = domesticHotelColIndex + 1;
+                  searchCol <= 20;
+                  searchCol++
+                ) {
                   const searchCell = eleventhRow.getCell(searchCol);
-                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                  if (
+                    searchCell.value !== null &&
+                    searchCell.value !== undefined
+                  ) {
                     // 检查是否是数字
-                    if (typeof searchCell.value === 'number') {
-                      allNumberCols.push({col: searchCol, value: searchCell.value});
-                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
-                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
-                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
-                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    if (typeof searchCell.value === "number") {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: searchCell.value
+                      });
+                      console.log(
+                        `找到数字列: 第${searchCol}列 = ${searchCell.value}`
+                      );
+                    } else if (
+                      typeof searchCell.value === "string" &&
+                      /^\d+\.?\d*$/.test(searchCell.value)
+                    ) {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: parseFloat(searchCell.value)
+                      });
+                      console.log(
+                        `找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`
+                      );
                     }
                   }
                 }
@@ -1977,7 +2057,9 @@ const generateGroupedExcelFiles = async () => {
                 if (allNumberCols.length > 0) {
                   const lastNumberCol = allNumberCols[allNumberCols.length - 1];
                   targetColIndex = lastNumberCol.col;
-                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                  console.log(
+                    `选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`
+                  );
                 }
 
                 if (targetColIndex !== -1) {
@@ -2030,12 +2112,11 @@ const generateGroupedExcelFiles = async () => {
           }
 
           if (internationalHotelColIndex !== -1) {
-            console.log(
-              `发现国际酒店数据，开始从拆分好的工作表中查找合计金额`
-            );
+            console.log(`发现国际酒店数据，开始从拆分好的工作表中查找合计金额`);
 
             // 从新创建的工作簿中查找国际酒店工作表
-            const internationalHotelWorksheet = newWorkbook.getWorksheet("国际酒店");
+            const internationalHotelWorksheet =
+              newWorkbook.getWorksheet("国际酒店");
             if (internationalHotelWorksheet) {
               console.log(`找到拆分好的国际酒店工作表`);
 
@@ -2092,29 +2173,56 @@ const generateGroupedExcelFiles = async () => {
                 console.log(`找到合计金额: ${totalAmount}`);
 
                 // 替换第十二行中国际酒店对应的总计金额
-                console.log(`国际酒店在第${internationalHotelColIndex}列，开始查找总计金额列`);
+                console.log(
+                  `国际酒店在第${internationalHotelColIndex}列，开始查找总计金额列`
+                );
 
                 // 打印第十二行的完整数据进行调试
                 console.log(`第十二行完整数据:`);
                 for (let debugCol = 1; debugCol <= 20; debugCol++) {
                   const debugCell = twelfthRow.getCell(debugCol);
-                  if (debugCell.value !== null && debugCell.value !== undefined) {
-                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  if (
+                    debugCell.value !== null &&
+                    debugCell.value !== undefined
+                  ) {
+                    console.log(
+                      `  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`
+                    );
                   }
                 }
 
                 // 查找国际酒店后面的所有数字列，找到最后一个数字列作为总计金额
-                let allNumberCols: {col: number, value: any}[] = [];
-                for (let searchCol = internationalHotelColIndex + 1; searchCol <= 20; searchCol++) {
+                let allNumberCols: { col: number; value: any }[] = [];
+                for (
+                  let searchCol = internationalHotelColIndex + 1;
+                  searchCol <= 20;
+                  searchCol++
+                ) {
                   const searchCell = twelfthRow.getCell(searchCol);
-                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                  if (
+                    searchCell.value !== null &&
+                    searchCell.value !== undefined
+                  ) {
                     // 检查是否是数字
-                    if (typeof searchCell.value === 'number') {
-                      allNumberCols.push({col: searchCol, value: searchCell.value});
-                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
-                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
-                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
-                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    if (typeof searchCell.value === "number") {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: searchCell.value
+                      });
+                      console.log(
+                        `找到数字列: 第${searchCol}列 = ${searchCell.value}`
+                      );
+                    } else if (
+                      typeof searchCell.value === "string" &&
+                      /^\d+\.?\d*$/.test(searchCell.value)
+                    ) {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: parseFloat(searchCell.value)
+                      });
+                      console.log(
+                        `找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`
+                      );
                     }
                   }
                 }
@@ -2124,7 +2232,9 @@ const generateGroupedExcelFiles = async () => {
                 if (allNumberCols.length > 0) {
                   const lastNumberCol = allNumberCols[allNumberCols.length - 1];
                   targetColIndex = lastNumberCol.col;
-                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                  console.log(
+                    `选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`
+                  );
                 }
 
                 if (targetColIndex !== -1) {
@@ -2177,9 +2287,7 @@ const generateGroupedExcelFiles = async () => {
           }
 
           if (domesticTrainColIndex !== -1) {
-            console.log(
-              `发现国内火车数据，开始从拆分好的工作表中查找合计金额`
-            );
+            console.log(`发现国内火车数据，开始从拆分好的工作表中查找合计金额`);
 
             // 从新创建的工作簿中查找火车票工作表
             const trainWorksheet = newWorkbook.getWorksheet("火车票");
@@ -2196,9 +2304,7 @@ const generateGroupedExcelFiles = async () => {
                 trainData[rowNumber] = rowData;
               });
 
-              console.log(
-                `火车票工作表共${trainData.length}行数据`
-              );
+              console.log(`火车票工作表共${trainData.length}行数据`);
 
               // 查找合计行
               let totalAmount = null;
@@ -2239,29 +2345,56 @@ const generateGroupedExcelFiles = async () => {
                 console.log(`找到合计金额: ${totalAmount}`);
 
                 // 替换第十三行中国内火车对应的总计金额
-                console.log(`国内火车在第${domesticTrainColIndex}列，开始查找总计金额列`);
+                console.log(
+                  `国内火车在第${domesticTrainColIndex}列，开始查找总计金额列`
+                );
 
                 // 打印第十三行的完整数据进行调试
                 console.log(`第十三行完整数据:`);
                 for (let debugCol = 1; debugCol <= 20; debugCol++) {
                   const debugCell = thirteenthRow.getCell(debugCol);
-                  if (debugCell.value !== null && debugCell.value !== undefined) {
-                    console.log(`  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`);
+                  if (
+                    debugCell.value !== null &&
+                    debugCell.value !== undefined
+                  ) {
+                    console.log(
+                      `  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`
+                    );
                   }
                 }
 
                 // 查找国内火车后面的所有数字列，找到最后一个数字列作为总计金额
-                let allNumberCols: {col: number, value: any}[] = [];
-                for (let searchCol = domesticTrainColIndex + 1; searchCol <= 20; searchCol++) {
+                let allNumberCols: { col: number; value: any }[] = [];
+                for (
+                  let searchCol = domesticTrainColIndex + 1;
+                  searchCol <= 20;
+                  searchCol++
+                ) {
                   const searchCell = thirteenthRow.getCell(searchCol);
-                  if (searchCell.value !== null && searchCell.value !== undefined) {
+                  if (
+                    searchCell.value !== null &&
+                    searchCell.value !== undefined
+                  ) {
                     // 检查是否是数字
-                    if (typeof searchCell.value === 'number') {
-                      allNumberCols.push({col: searchCol, value: searchCell.value});
-                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
-                    } else if (typeof searchCell.value === 'string' && /^\d+\.?\d*$/.test(searchCell.value)) {
-                      allNumberCols.push({col: searchCol, value: parseFloat(searchCell.value)});
-                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
+                    if (typeof searchCell.value === "number") {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: searchCell.value
+                      });
+                      console.log(
+                        `找到数字列: 第${searchCol}列 = ${searchCell.value}`
+                      );
+                    } else if (
+                      typeof searchCell.value === "string" &&
+                      /^\d+\.?\d*$/.test(searchCell.value)
+                    ) {
+                      allNumberCols.push({
+                        col: searchCol,
+                        value: parseFloat(searchCell.value)
+                      });
+                      console.log(
+                        `找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`
+                      );
                     }
                   }
                 }
@@ -2271,7 +2404,9 @@ const generateGroupedExcelFiles = async () => {
                 if (allNumberCols.length > 0) {
                   const lastNumberCol = allNumberCols[allNumberCols.length - 1];
                   targetColIndex = lastNumberCol.col;
-                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
+                  console.log(
+                    `选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`
+                  );
                 }
 
                 if (targetColIndex !== -1) {
@@ -2301,6 +2436,144 @@ const generateGroupedExcelFiles = async () => {
       }
 
       console.log(`===== 第十三行国内火车总计金额替换处理结束 =====`);
+
+      // 处理第九行到十三行的折叠逻辑（如果总计金额为0）
+      console.log(`===== 开始处理第九行到十七行折叠逻辑 =====`);
+
+      if (summaryWorksheet) {
+        const rowsToProcess = [
+          { rowNumber: 9, name: "国内机票" },
+          { rowNumber: 10, name: "国际机票" },
+          { rowNumber: 11, name: "国内酒店" },
+          { rowNumber: 12, name: "国际酒店" },
+          { rowNumber: 13, name: "国内火车" },
+          { rowNumber: 14, name: "国内用车" },
+          { rowNumber: 15, name: "国内外卖" },
+          { rowNumber: 16, name: "商务卡" },
+          { rowNumber: 17, name: "滞纳金" }
+        ];
+
+        for (const rowInfo of rowsToProcess) {
+          const row = summaryWorksheet.getRow(rowInfo.rowNumber);
+          if (row) {
+            console.log(
+              `检查第${rowInfo.rowNumber}行(${rowInfo.name})的总计金额...`
+            );
+
+            // 查找该行的总计金额（最后一个数字列）
+            let totalAmount = null;
+            let totalColIndex = -1;
+            let allNumberCols: { col: number; value: any }[] = [];
+
+            // 遍历该行的所有单元格，查找数字列
+            for (let col = 1; col <= 50; col++) {
+              const cell = row.getCell(col);
+              if (cell.value !== null && cell.value !== undefined) {
+                if (typeof cell.value === "number") {
+                  allNumberCols.push({ col: col, value: cell.value });
+                } else if (
+                  typeof cell.value === "string" &&
+                  /^\d+\.?\d*$/.test(cell.value)
+                ) {
+                  allNumberCols.push({
+                    col: col,
+                    value: parseFloat(cell.value)
+                  });
+                }
+              }
+            }
+
+            // 使用最后一个数字作为总计金额
+            if (allNumberCols.length > 0) {
+              const lastNumberCol = allNumberCols[allNumberCols.length - 1];
+              totalAmount = lastNumberCol.value;
+              totalColIndex = lastNumberCol.col;
+              console.log(
+                `第${rowInfo.rowNumber}行总计金额: ${totalAmount} (第${totalColIndex}列)`
+              );
+            }
+
+            // 如果总计金额为0，进行折叠处理
+            if (totalAmount !== null && totalAmount === 0) {
+              console.log(
+                `第${rowInfo.rowNumber}行(${rowInfo.name})总计金额为0，开始隐藏处理`
+              );
+
+              // 隐藏整行 - 尝试多种方法
+
+              // 方法1: 标准隐藏
+              row.hidden = true;
+
+              // 方法2: 设置极小行高
+              row.height = 0; // 1磅，Excel可能的最小行高
+
+              // 方法3: 使用outline层级隐藏
+              row.outlineLevel = 1;
+
+              console.log(
+                `第${rowInfo.rowNumber}行隐藏处理完成 (hidden: ${row.hidden}, height: ${row.height})`
+              );
+            } else {
+              console.log(
+                `第${rowInfo.rowNumber}行总计金额不为0(${totalAmount})，无需隐藏`
+              );
+            }
+          } else {
+            console.log(`第${rowInfo.rowNumber}行不存在`);
+          }
+        }
+
+        // 可选：如果有行被隐藏，可以调整行高或添加备注
+        console.log(`第九行到十三行折叠逻辑处理完成`);
+      } else {
+        console.log(`未找到结算单工作表，无法进行折叠处理`);
+      }
+
+      console.log(`===== 第九行到十三行折叠逻辑处理结束 =====`);
+
+      // 最终确认隐藏设置：在生成文件前再次确保隐藏属性生效
+      console.log(`===== 最终确认隐藏设置 =====`);
+      if (summaryWorksheet) {
+        const rowsToHide = [9, 10, 11, 12, 13];
+
+        // 设置工作表的行隐藏属性
+        for (const rowNum of rowsToHide) {
+          const row = summaryWorksheet.getRow(rowNum);
+          if (row && row.hidden) {
+            // 再次设置隐藏属性，确保在生成文件时生效
+            row.hidden = true;
+            row.height = 0;
+
+            // 尝试通过设置行属性来强制隐藏
+            if (row.model) {
+              row.model.hidden = true;
+            }
+
+            console.log(
+              `再次确认第${rowNum}行隐藏设置 (hidden: ${row.hidden})`
+            );
+          }
+        }
+
+        // 尝试直接操作工作表的行隐藏设置
+        // 这是ExcelJS的内部方法，可能更有效
+        try {
+          // 遍历所有需要隐藏的行
+          rowsToHide.forEach(rowNum => {
+            const row = summaryWorksheet.getRow(rowNum);
+            if (row && row.hidden) {
+              // 强制设置行模型属性
+              if (row.model) {
+                row.model.hidden = true;
+                row.model.height = 0;
+              }
+            }
+          });
+        } catch (error) {
+          console.log(`内部隐藏设置方法失败: ${error}`);
+        }
+      }
+      console.log(`===== 最终确认隐藏设置完成 =====`);
 
       // 生成Excel文件内容
       const excelBuffer = await newWorkbook.xlsx.writeBuffer();
