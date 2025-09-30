@@ -52,6 +52,11 @@ const readFile = (file: File) => {
               name: "火车票明细",
               key: "train",
               departmentKeyword: "乘车人部门"
+            },
+            {
+              name: "机票明细(国内)",
+              key: "flight",
+              departmentKeyword: "乘机人部门"
             }
           ];
 
@@ -277,9 +282,16 @@ const beforeUpload = (file: File) => {
   return true;
 };
 
-// 获取分组信息
+// 获取分组信息（按公司名称汇总）
 const getGroupInfo = () => {
-  const allGroupInfo: any[] = [];
+  const companyGroups = new Map<string, {
+    groupName: string;
+    hotelInfo?: { count: number; rowRange: string };
+    trainInfo?: { count: number; rowRange: string };
+    flightInfo?: { count: number; rowRange: string };
+    totalCount: number;
+    editableFileName: string;
+  }>();
 
   // 处理酒店数据
   if (allSheetData.value.hotel && allSheetData.value.hotel.length > 0) {
@@ -289,7 +301,26 @@ const getGroupInfo = () => {
       "入住人部门",
       "hotel"
     );
-    allGroupInfo.push(...hotelGroups);
+
+    hotelGroups.forEach(group => {
+      if (!companyGroups.has(group.groupName)) {
+        const existing = editableFileNames.value.find(
+          item => item.groupName === group.groupName
+        );
+        companyGroups.set(group.groupName, {
+          groupName: group.groupName,
+          totalCount: 0,
+          editableFileName: existing ? existing.fileName : group.groupName
+        });
+      }
+
+      const companyGroup = companyGroups.get(group.groupName)!;
+      companyGroup.hotelInfo = {
+        count: group.count,
+        rowRange: group.rowRange
+      };
+      companyGroup.totalCount += group.count;
+    });
   }
 
   // 处理火车票数据
@@ -300,10 +331,59 @@ const getGroupInfo = () => {
       "乘车人部门",
       "train"
     );
-    allGroupInfo.push(...trainGroups);
+
+    trainGroups.forEach(group => {
+      if (!companyGroups.has(group.groupName)) {
+        const existing = editableFileNames.value.find(
+          item => item.groupName === group.groupName
+        );
+        companyGroups.set(group.groupName, {
+          groupName: group.groupName,
+          totalCount: 0,
+          editableFileName: existing ? existing.fileName : group.groupName
+        });
+      }
+
+      const companyGroup = companyGroups.get(group.groupName)!;
+      companyGroup.trainInfo = {
+        count: group.count,
+        rowRange: group.rowRange
+      };
+      companyGroup.totalCount += group.count;
+    });
   }
 
-  return allGroupInfo;
+  // 处理机票数据
+  if (allSheetData.value.flight && allSheetData.value.flight.length > 0) {
+    const flightGroups = processSheetData(
+      allSheetData.value.flight,
+      "机票明细(国内)",
+      "乘机人部门",
+      "flight"
+    );
+
+    flightGroups.forEach(group => {
+      if (!companyGroups.has(group.groupName)) {
+        const existing = editableFileNames.value.find(
+          item => item.groupName === group.groupName
+        );
+        companyGroups.set(group.groupName, {
+          groupName: group.groupName,
+          totalCount: 0,
+          editableFileName: existing ? existing.fileName : group.groupName
+        });
+      }
+
+      const companyGroup = companyGroups.get(group.groupName)!;
+      companyGroup.flightInfo = {
+        count: group.count,
+        rowRange: group.rowRange
+      };
+      companyGroup.totalCount += group.count;
+    });
+  }
+
+  return Array.from(companyGroups.values());
 };
 
 // 处理单个工作表数据
@@ -330,10 +410,36 @@ const processSheetData = (
   const validDataFromRow4 = sheetData
     .slice(3)
     .filter((row: any[], index: number) => {
-      return (
-        row[departmentColumnIndex] &&
-        row[departmentColumnIndex].toString().trim() !== ""
+      const departmentValue = row[departmentColumnIndex];
+      if (!departmentValue || departmentValue.toString().trim() === "") {
+        return false;
+      }
+
+      const departmentText = departmentValue.toString();
+
+      // 过滤掉合计行、总计行等非数据行
+      const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
+      const isSummaryRow = summaryKeywords.some(keyword =>
+        departmentText.toLowerCase().includes(keyword.toLowerCase())
       );
+
+      // 过滤纯数字（可能是金额合计）
+      const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+
+      // 过滤空值、特殊字符
+      const isEmptyOrSpecial = departmentText.trim() === "" ||
+                               /^[\-_=+]+$/.test(departmentText.trim()) ||
+                               departmentText.length < 2;
+
+      // 如果是空值、合计行、纯数字或特殊字符，不进行分组处理
+      if (isSummaryRow || isPureNumber || isEmptyOrSpecial) {
+        console.log(`跳过非数据行: 行号${index + 4}, 内容: ${departmentText}, 类型: ${
+          isSummaryRow ? '合计行' : isPureNumber ? '纯数字' : '空值/特殊字符'
+        }`);
+        return false;
+      }
+
+      return true;
     })
     .map((row: any[], index: number) => ({
       行号: index + 4,
@@ -345,11 +451,22 @@ const processSheetData = (
   const groups = new Map<string, typeof validDataFromRow4>();
   validDataFromRow4.forEach(item => {
     const department = item[departmentKeyword].toString();
-    const firstPart = department.split("-")[0];
-    if (!groups.has(firstPart)) {
-      groups.set(firstPart, []);
+
+    // 只有包含"-"的部门信息才进行拆分，否则使用完整的部门名称
+    let groupName: string;
+    if (department.includes("-")) {
+      groupName = department.split("-")[0].trim();
+    } else {
+      groupName = department.trim();
     }
-    groups.get(firstPart)!.push(item);
+
+    // 确保分组名称不为空
+    if (groupName) {
+      if (!groups.has(groupName)) {
+        groups.set(groupName, []);
+      }
+      groups.get(groupName)!.push(item);
+    }
   });
 
   // 返回分组信息
@@ -391,22 +508,21 @@ const getGroupCount = () => {
   return getGroupInfo().length;
 };
 
-// 更新文件名
+// 更新文件名（不再区分工作表类型）
 const updateFileName = (
   groupName: string,
   newFileName: string,
   sheetType?: string
 ) => {
   const existing = editableFileNames.value.find(
-    item => item.groupName === groupName && item.sheetType === sheetType
+    item => item.groupName === groupName
   );
   if (existing) {
     existing.fileName = newFileName;
   } else {
     editableFileNames.value.push({
       groupName: groupName,
-      fileName: newFileName,
-      sheetType: sheetType
+      fileName: newFileName
     });
   }
 };
@@ -585,99 +701,206 @@ const generateGroupedExcelFiles = async () => {
 
   try {
     const groupInfo = getGroupInfo();
-    console.log(`准备生成 ${groupInfo.length} 个Excel文件`);
+    console.log(`准备为 ${groupInfo.length} 个公司生成Excel文件`);
 
     // 创建ZIP文件
     const zip = new JSZip();
 
-    // 按分组名组织数据，每个分组可能包含多个工作表
-    const groupedData = new Map<
-      string,
-      { sheetType: string; data: any[]; groupName: string }[]
-    >();
-
-    groupInfo.forEach(group => {
-      if (!groupedData.has(group.groupName)) {
-        groupedData.set(group.groupName, []);
-      }
-      groupedData.get(group.groupName)!.push({
-        sheetType: group.sheetType,
-        data: allSheetData.value[group.sheetType],
-        groupName: group.groupName
-      });
-    });
-
-    // 为每个分组生成Excel文件
-    for (const [groupName, sheets] of groupedData.entries()) {
+    // 为每个公司生成Excel文件
+    for (const companyGroup of groupInfo) {
       console.log(
-        `生成文件: ${groupName}.xlsx，包含 ${sheets.length} 个工作表`
+        `生成文件: ${companyGroup.editableFileName}.xlsx，公司: ${companyGroup.groupName}`
       );
 
       // 创建新的工作簿
       const newWorkbook = new ExcelJS.Workbook();
 
-      // 为每个工作表创建对应的工作表
-      for (const sheetInfo of sheets) {
-        const { sheetType, data } = sheetInfo;
-
-        if (!data || data.length === 0) continue;
-
-        const sheetName = sheetType === "hotel" ? "国内酒店" : "火车票";
-        const newWorksheet = newWorkbook.addWorksheet(sheetName, {
-          views: [{ showGridLines: true }]
-        });
-
-        // 设置默认行高
-        newWorksheet.properties.defaultRowHeight = 40;
-
-        // 获取该工作表的分组数据
-        const departmentKeyword =
-          sheetType === "hotel" ? "入住人部门" : "乘车人部门";
-        const departmentColumnIndex = (data[2] as any[]).findIndex(
+      // 检查是否有酒店数据并添加工作表
+      if (companyGroup.hotelInfo && allSheetData.value.hotel) {
+        const hotelData = allSheetData.value.hotel;
+        const departmentKeyword = "入住人部门";
+        const departmentColumnIndex = (hotelData[2] as any[]).findIndex(
           (cell: any) => cell && cell.toString().includes(departmentKeyword)
         );
 
-        if (departmentColumnIndex === -1) continue;
+        if (departmentColumnIndex !== -1) {
+          const newWorksheet = newWorkbook.addWorksheet("国内酒店", {
+            views: [{ showGridLines: true }]
+          });
+          newWorksheet.properties.defaultRowHeight = 40;
 
-        // 筛选该分组的数据
-        const groupData = data.slice(3).filter((row: any[], index: number) => {
-          return (
-            row[departmentColumnIndex] &&
-            row[departmentColumnIndex].toString().split("-")[0] === groupName
-          );
-        });
+          // 筛选该公司的酒店数据
+          const companyHotelData = hotelData.slice(3).filter((row: any[], index: number) => {
+            const departmentValue = row[departmentColumnIndex];
+            if (!departmentValue) return false;
 
-        // 复制原始前三行
-        const headerRows = data.slice(0, 3);
+            const departmentText = departmentValue.toString();
 
-        // 写入数据到工作表
-        const newData = [...headerRows];
-        groupData.forEach(row => {
-          newData.push(row);
-        });
+            // 过滤掉合计行、总计行等非数据行
+            const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
+            const isSummaryRow = summaryKeywords.some(keyword =>
+              departmentText.toLowerCase().includes(keyword.toLowerCase())
+            );
 
-        console.log(`  工作表 ${sheetName}: ${newData.length} 行数据`);
+            // 过滤纯数字（可能是金额合计）
+            const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
 
-        // 应用样式和格式
-        await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
+            // 过滤空值、特殊字符
+            const isEmptyOrSpecial = departmentText.trim() === "" ||
+                                     /^[\-_=+]+$/.test(departmentText.trim()) ||
+                                     departmentText.length < 2;
+
+            if (isSummaryRow || isPureNumber || isEmptyOrSpecial) return false;
+
+            // 获取分组名称进行匹配
+            let groupName: string;
+            if (departmentText.includes("-")) {
+              groupName = departmentText.split("-")[0].trim();
+            } else {
+              groupName = departmentText.trim();
+            }
+
+            return groupName === companyGroup.groupName;
+          });
+
+          // 复制原始前三行
+          const headerRows = hotelData.slice(0, 3);
+          const newData = [...headerRows, ...companyHotelData];
+
+          console.log(`  酒店工作表: ${newData.length} 行数据`);
+
+          // 应用样式和格式
+          await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
+        }
+      }
+
+      // 检查是否有火车票数据并添加工作表
+      if (companyGroup.trainInfo && allSheetData.value.train) {
+        const trainData = allSheetData.value.train;
+        const departmentKeyword = "乘车人部门";
+        const departmentColumnIndex = (trainData[2] as any[]).findIndex(
+          (cell: any) => cell && cell.toString().includes(departmentKeyword)
+        );
+
+        if (departmentColumnIndex !== -1) {
+          const newWorksheet = newWorkbook.addWorksheet("火车票", {
+            views: [{ showGridLines: true }]
+          });
+          newWorksheet.properties.defaultRowHeight = 40;
+
+          // 筛选该公司的火车票数据
+          const companyTrainData = trainData.slice(3).filter((row: any[], index: number) => {
+            const departmentValue = row[departmentColumnIndex];
+            if (!departmentValue) return false;
+
+            const departmentText = departmentValue.toString();
+
+            // 过滤掉合计行、总计行等非数据行
+            const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
+            const isSummaryRow = summaryKeywords.some(keyword =>
+              departmentText.toLowerCase().includes(keyword.toLowerCase())
+            );
+
+            // 过滤纯数字（可能是金额合计）
+            const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+
+            // 过滤空值、特殊字符
+            const isEmptyOrSpecial = departmentText.trim() === "" ||
+                                     /^[\-_=+]+$/.test(departmentText.trim()) ||
+                                     departmentText.length < 2;
+
+            if (isSummaryRow || isPureNumber || isEmptyOrSpecial) return false;
+
+            // 获取分组名称进行匹配
+            let groupName: string;
+            if (departmentText.includes("-")) {
+              groupName = departmentText.split("-")[0].trim();
+            } else {
+              groupName = departmentText.trim();
+            }
+
+            return groupName === companyGroup.groupName;
+          });
+
+          // 复制原始前三行
+          const headerRows = trainData.slice(0, 3);
+          const newData = [...headerRows, ...companyTrainData];
+
+          console.log(`  火车票工作表: ${newData.length} 行数据`);
+
+          // 应用样式和格式
+          await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
+        }
+      }
+
+      // 检查是否有机票数据并添加工作表
+      if (companyGroup.flightInfo && allSheetData.value.flight) {
+        const flightData = allSheetData.value.flight;
+        const departmentKeyword = "乘机人部门";
+        const departmentColumnIndex = (flightData[2] as any[]).findIndex(
+          (cell: any) => cell && cell.toString().includes(departmentKeyword)
+        );
+
+        if (departmentColumnIndex !== -1) {
+          const newWorksheet = newWorkbook.addWorksheet("国内机票", {
+            views: [{ showGridLines: true }]
+          });
+          newWorksheet.properties.defaultRowHeight = 40;
+
+          // 筛选该公司的机票数据
+          const companyFlightData = flightData.slice(3).filter((row: any[], index: number) => {
+            const departmentValue = row[departmentColumnIndex];
+            if (!departmentValue) return false;
+
+            const departmentText = departmentValue.toString();
+
+            // 过滤掉合计行、总计行等非数据行
+            const summaryKeywords = ["合计", "总计", "总和", "小计", "sum", "total", "summary"];
+            const isSummaryRow = summaryKeywords.some(keyword =>
+              departmentText.toLowerCase().includes(keyword.toLowerCase())
+            );
+
+            // 过滤纯数字（可能是金额合计）
+            const isPureNumber = /^\d+(\.\d+)?$/.test(departmentText.trim());
+
+            // 过滤空值、特殊字符
+            const isEmptyOrSpecial = departmentText.trim() === "" ||
+                                     /^[\-_=+]+$/.test(departmentText.trim()) ||
+                                     departmentText.length < 2;
+
+            if (isSummaryRow || isPureNumber || isEmptyOrSpecial) return false;
+
+            // 获取分组名称进行匹配
+            let groupName: string;
+            if (departmentText.includes("-")) {
+              groupName = departmentText.split("-")[0].trim();
+            } else {
+              groupName = departmentText.trim();
+            }
+
+            return groupName === companyGroup.groupName;
+          });
+
+          // 复制原始前三行
+          const headerRows = flightData.slice(0, 3);
+          const newData = [...headerRows, ...companyFlightData];
+
+          console.log(`  机票工作表: ${newData.length} 行数据`);
+
+          // 应用样式和格式
+          await applyWorksheetStyling(newWorksheet, newData, departmentKeyword);
+        }
       }
 
       // 生成Excel文件内容
       const excelBuffer = await newWorkbook.xlsx.writeBuffer();
 
-      // 添加到ZIP文件 - 使用用户编辑的文件名
-      const savedFileName = editableFileNames.value.find(
-        item =>
-          item.groupName === groupName && item.sheetType === sheets[0].sheetType
-      );
-      const userFileName = savedFileName ? savedFileName.fileName : groupName;
-      const finalFileName = userFileName.endsWith(".xlsx")
-        ? userFileName
-        : `${userFileName}.xlsx`;
+      // 使用用户编辑的文件名
+      const finalFileName = companyGroup.editableFileName.endsWith(".xlsx")
+        ? companyGroup.editableFileName
+        : `${companyGroup.editableFileName}.xlsx`;
 
-      console.log(
-        `使用文件名: ${finalFileName} (原始分组: ${groupName}, 用户输入: ${userFileName})`
-      );
+      console.log(`使用文件名: ${finalFileName}`);
       zip.file(finalFileName, excelBuffer);
     }
 
@@ -688,11 +911,11 @@ const generateGroupedExcelFiles = async () => {
     const zipBlob = new Blob([new Uint8Array(zipBuffer)], {
       type: "application/zip"
     });
-    const fileName = `国内酒店账单_${uploadedFile.value?.name.replace(".xlsx", "").replace(".xls", "")}_${new Date().toISOString().slice(0, 10)}.zip`;
+    const fileName = `账单分账_${uploadedFile.value?.name.replace(".xlsx", "").replace(".xls", "")}_${new Date().toISOString().slice(0, 10)}.zip`;
     saveAs(zipBlob, fileName);
 
     ElMessage.success(
-      `成功生成 ${groupInfo.length} 个Excel文件并打包为ZIP文件`
+      `成功为 ${groupInfo.length} 个公司生成Excel文件并打包为ZIP文件`
     );
     console.log(`生成完成: ${fileName}`);
   } catch (error) {
@@ -768,21 +991,41 @@ const generateGroupedExcelFiles = async () => {
 
         <div class="data-table">
           <el-table :data="getGroupInfo()" border style="width: 100%">
-            <el-table-column prop="sheetName" label="工作表" width="120" />
-            <el-table-column prop="groupName" label="分组名称" width="200" />
-            <el-table-column prop="count" label="数据条数" width="120" />
-            <el-table-column prop="rowRange" label="行号范围" width="150" />
+            <el-table-column prop="groupName" label="公司名称" width="200" />
+            <el-table-column label="酒店明细" width="150">
+              <template #default="scope">
+                <div v-if="scope.row.hotelInfo">
+                  <div>{{ scope.row.hotelInfo.count }} 条</div>
+                  <div class="text-gray-500 text-sm">{{ scope.row.hotelInfo.rowRange }}</div>
+                </div>
+                <div v-else class="text-gray-400">无数据</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="火车票明细" width="150">
+              <template #default="scope">
+                <div v-if="scope.row.trainInfo">
+                  <div>{{ scope.row.trainInfo.count }} 条</div>
+                  <div class="text-gray-500 text-sm">{{ scope.row.trainInfo.rowRange }}</div>
+                </div>
+                <div v-else class="text-gray-400">无数据</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="机票明细" width="150">
+              <template #default="scope">
+                <div v-if="scope.row.flightInfo">
+                  <div>{{ scope.row.flightInfo.count }} 条</div>
+                  <div class="text-gray-500 text-sm">{{ scope.row.flightInfo.rowRange }}</div>
+                </div>
+                <div v-else class="text-gray-400">无数据</div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="totalCount" label="总数据条数" width="120" />
             <el-table-column label="生成文件名">
               <template #default="scope">
                 <el-input
                   :model-value="scope.row.editableFileName"
                   @update:model-value="
-                    value =>
-                      updateFileName(
-                        scope.row.groupName,
-                        value,
-                        scope.row.sheetType
-                      )
+                    value => updateFileName(scope.row.groupName, value)
                   "
                   placeholder="请输入文件名"
                   style="width: 100%"

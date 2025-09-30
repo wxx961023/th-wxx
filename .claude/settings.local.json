@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(pnpm:*)",
-      "Bash(npm run typecheck:*)"
+      "Bash(npm run typecheck:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []
