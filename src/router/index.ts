@@ -54,19 +54,42 @@ const pdfRoute: RouteRecordRaw = {
         title: "发票"
       }
     },
-    
+
+  ]
+}
+
+/** 账单分账路由 */
+const billSplitRoute: RouteRecordRaw = {
+  path: "/bill-split",
+  name: "BillSplitModule",
+  component: () => import("@/layout/index.vue"),
+  redirect: "/bill-split/index",
+  meta: {
+    icon: "ep:money",
+    title: "账单分账",
+    rank: 2
+  },
+  children: [
+    {
+      path: "/bill-split/index",
+      name: "BillSplitIndex",
+      component: () => import("@/views/bill-split/index.vue"),
+      meta: {
+        title: "账单分账"
+      }
+    }
   ]
 }
 
 
 /** 导出静态路由 */
-export const constantRoutes: Array<RouteRecordRaw> = [homeRoute, pdfRoute]
+export const constantRoutes: Array<RouteRecordRaw> = [homeRoute, pdfRoute, billSplitRoute]
 
 /** 初始的静态路由，用于退出登录时重置路由 */
 const initConstantRoutes: Array<RouteRecordRaw> = cloneDeep(constantRoutes)
 
 /** 用于渲染菜单，保持原始层级 */
-export const constantMenus: Array<any> = [homeRoute, pdfRoute]
+export const constantMenus: Array<any> = [homeRoute, pdfRoute, billSplitRoute]
 
 /** 不参与菜单的路由 */
 export const remainingPaths = Object.keys(remainingRouter).map(v => {

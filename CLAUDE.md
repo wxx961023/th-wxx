@@ -62,6 +62,7 @@ The project has been customized with two main modules:
 - All linting is currently disabled
 - Development server runs on port from `VITE_PORT` env variable (default varies)
 - Build output organized in `static/` directory with hash-based filenames
+- Memory allocation: 4GB for development, 8GB for production builds
 
 ### Configuration
 - Dynamic config loading from `public/platform-config.json`
