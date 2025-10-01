@@ -5,9 +5,21 @@ export interface CompanyInfo {
   phone: string;
 }
 
+export interface PersonInfo {
+  fullName: string; // 公司全称
+  shortName: string;
+  contact: string;
+  phone: string;
+}
+
 export interface CompanyConfig {
   nameMapping: Record<string, CompanyInfo>;
   getCompanyInfo(fullName: string): CompanyInfo;
+}
+
+export interface PersonConfig {
+  nameMapping: Record<string, PersonInfo>;
+  getPersonInfo(personName: string): PersonInfo;
 }
 
 const companyConfig: CompanyConfig = {
@@ -67,4 +79,42 @@ const companyConfig: CompanyConfig = {
   }
 };
 
+// 大梦龙途人员配置
+const personConfig: PersonConfig = {
+  // 人员名称映射配置
+  nameMapping: {
+    陈敏铷: {
+      fullName: "广州煋禾网络有限公司",
+      shortName: "陈敏铷",
+      contact: "陈敏铷",
+      phone: "13538774228"
+    },
+    洪晴: {
+      fullName: "待补充", // 暂时使用默认值，等用户补充
+      shortName: "洪晴",
+      contact: "洪晴",
+      phone: "16670917363"
+    },
+    王梓懿: {
+      fullName: "深圳市大梦龙途文化传播有限公司", // 暂时使用默认值，等用户补充
+      shortName: "王梓懿",
+      contact: "王梓懿",
+      phone: "13824342455"
+    }
+  },
+
+  // 获取人员映射信息
+  getPersonInfo(personName: string): PersonInfo {
+    return (
+      this.nameMapping[personName] || {
+        fullName: personName, // 如果没有配置，使用原名
+        shortName: personName,
+        contact: personName,
+        phone: ""
+      }
+    );
+  }
+};
+
 export default companyConfig;
+export { personConfig };
