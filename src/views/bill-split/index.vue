@@ -46,27 +46,27 @@ const readFile = (file: File) => {
             {
               name: "酒店明细(国内)",
               key: "hotel",
-              departmentKeyword: "入住人部门"
+              departmentKeyword: "预订人部门"
             },
             {
               name: "酒店明细(国际)",
               key: "internationalHotel",
-              departmentKeyword: "入住人部门"
+              departmentKeyword: "预订人部门"
             },
             {
               name: "火车票明细",
               key: "train",
-              departmentKeyword: "乘车人部门"
+              departmentKeyword: "预订人部门"
             },
             {
               name: "机票明细(国内)",
               key: "flight",
-              departmentKeyword: "乘机人部门"
+              departmentKeyword: "预订人部门"
             },
             {
               name: "机票明细(国际)",
               key: "internationalFlight",
-              departmentKeyword: "乘机人部门"
+              departmentKeyword: "预订人部门"
             }
           ];
 
@@ -313,7 +313,7 @@ const getGroupInfo = () => {
     const hotelGroups = processSheetData(
       allSheetData.value.hotel,
       "酒店明细(国内)",
-      "入住人部门",
+      "预订人部门",
       "hotel"
     );
 
@@ -344,7 +344,7 @@ const getGroupInfo = () => {
     const internationalHotelGroups = processSheetData(
       allSheetData.value.internationalHotel,
       "酒店明细(国际)",
-      "入住人部门",
+      "预订人部门",
       "internationalHotel"
     );
 
@@ -377,7 +377,7 @@ const getGroupInfo = () => {
     const trainGroups = processSheetData(
       allSheetData.value.train,
       "火车票明细",
-      "乘车人部门",
+      "预订人部门",
       "train"
     );
 
@@ -410,7 +410,7 @@ const getGroupInfo = () => {
     const flightGroups = processSheetData(
       allSheetData.value.flight,
       "机票明细(国内)",
-      "乘机人部门",
+      "预订人部门",
       "flight"
     );
 
@@ -446,7 +446,7 @@ const getGroupInfo = () => {
     const internationalFlightGroups = processSheetData(
       allSheetData.value.internationalFlight,
       "机票明细(国际)",
-      "乘机人部门",
+      "预订人部门",
       "internationalFlight"
     );
 
@@ -1203,7 +1203,7 @@ const generateGroupedExcelFiles = async () => {
       // 检查是否有酒店数据并添加工作表
       if (companyGroup.hotelInfo && allSheetData.value.hotel) {
         const hotelData = allSheetData.value.hotel;
-        const departmentKeyword = "入住人部门";
+        const departmentKeyword = "预订人部门";
         const departmentColumnIndex = (hotelData[2] as any[]).findIndex(
           (cell: any) => cell && cell.toString().includes(departmentKeyword)
         );
@@ -1277,7 +1277,7 @@ const generateGroupedExcelFiles = async () => {
         allSheetData.value.internationalHotel
       ) {
         const internationalHotelData = allSheetData.value.internationalHotel;
-        const departmentKeyword = "入住人部门";
+        const departmentKeyword = "预订人部门";
         const departmentColumnIndex = (
           internationalHotelData[2] as any[]
         ).findIndex(
@@ -1350,7 +1350,7 @@ const generateGroupedExcelFiles = async () => {
       // 检查是否有火车票数据并添加工作表
       if (companyGroup.trainInfo && allSheetData.value.train) {
         const trainData = allSheetData.value.train;
-        const departmentKeyword = "乘车人部门";
+        const departmentKeyword = "预订人部门";
         const departmentColumnIndex = (trainData[2] as any[]).findIndex(
           (cell: any) => cell && cell.toString().includes(departmentKeyword)
         );
@@ -1421,7 +1421,7 @@ const generateGroupedExcelFiles = async () => {
       // 检查是否有机票数据并添加工作表
       if (companyGroup.flightInfo && allSheetData.value.flight) {
         const flightData = allSheetData.value.flight;
-        const departmentKeyword = "乘机人部门";
+        const departmentKeyword = "预订人部门";
         const departmentColumnIndex = (flightData[2] as any[]).findIndex(
           (cell: any) => cell && cell.toString().includes(departmentKeyword)
         );
@@ -1495,7 +1495,7 @@ const generateGroupedExcelFiles = async () => {
         allSheetData.value.internationalFlight
       ) {
         const internationalFlightData = allSheetData.value.internationalFlight;
-        const departmentKeyword = "乘机人部门";
+        const departmentKeyword = "预订人部门";
         const departmentColumnIndex = (
           internationalFlightData[2] as any[]
         ).findIndex(
