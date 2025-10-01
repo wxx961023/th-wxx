@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import CxjgBillSplit from "./components/cxjg.vue";
 import DmltBillSplit from "./components/dmlt.vue";
+import SdmBillSplit from "./components/sdm.vue";
 
 defineOptions({
   name: "BillSplitIndex"
@@ -31,6 +32,12 @@ const selectedComponent = ref<string>("cxjg");
                 <p>适用于大梦龙途的账单分账处理</p>
               </div>
             </el-radio>
+            <el-radio label="sdm">
+              <div class="component-option">
+                <h4>森达美</h4>
+                <p>适用于森达美的账单分账处理（按人名拆分）</p>
+              </div>
+            </el-radio>
           </el-radio-group>
         </el-card>
       </div>
@@ -39,6 +46,7 @@ const selectedComponent = ref<string>("cxjg");
       <div class="component-content">
         <CxjgBillSplit v-if="selectedComponent === 'cxjg'" />
         <DmltBillSplit v-else-if="selectedComponent === 'dameng-longtu'" />
+        <SdmBillSplit v-else-if="selectedComponent === 'sdm'" />
       </div>
     </div>
   </div>
