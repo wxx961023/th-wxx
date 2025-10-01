@@ -39,6 +39,20 @@ import Sortable from "sortablejs";
 // 设置PDF.js的worker路径，使用本地worker文件
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
+// Promise.withResolvers polyfill for Win7 compatibility
+if (typeof Promise !== "undefined" && !Promise.withResolvers) {
+  console.log("添加 Promise.withResolvers polyfill");
+  (Promise as any).withResolvers = function <T>() {
+    let resolve: (value: T | PromiseLike<T>) => void;
+    let reject: (reason?: any) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
 // Win7兼容性检查
 const checkWin7Compatibility = () => {
   console.log("=== Win7兼容性检查 ===");
@@ -77,6 +91,9 @@ const checkWin7Compatibility = () => {
   const features = {
     worker: typeof Worker !== "undefined",
     promise: typeof Promise !== "undefined",
+    promiseWithResolvers:
+      typeof Promise !== "undefined" &&
+      typeof Promise.withResolvers === "function",
     arrayBuffer: typeof ArrayBuffer !== "undefined",
     fileReader: typeof FileReader !== "undefined",
     blob: typeof Blob !== "undefined",
@@ -1553,6 +1570,14 @@ onMounted(() => {
   console.log(
     "- PDF.getDocument可用:",
     typeof pdfjsLib.getDocument === "function"
+  );
+  console.log(
+    "- Promise.withResolvers支持:",
+    typeof Promise.withResolvers === "function"
+  );
+  console.log(
+    "- Promise.withResolvers polyfill状态:",
+    Promise.withResolvers ? "已添加" : "未添加"
   );
 
   // 监听文件列表变化，重新初始化拖拽排序
