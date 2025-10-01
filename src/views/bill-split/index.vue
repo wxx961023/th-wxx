@@ -1565,10 +1565,185 @@ const generateGroupedExcelFiles = async () => {
         }
       }
 
+      // 辅助函数：从费用类型工作表中查找服务费列并求和
+      const getServiceFeeTotal = (worksheetName: string): number | null => {
+        console.log(`===== 开始查找 ${worksheetName} 的服务费总额 =====`);
+
+        const worksheet = newWorkbook.getWorksheet(worksheetName);
+        if (!worksheet) {
+          console.log(`未找到工作表: ${worksheetName}`);
+          return null;
+        }
+
+        // 获取工作表的所有数据
+        const worksheetData: any[][] = [];
+        worksheet.eachRow((row, rowNumber) => {
+          const rowData: any[] = [];
+          row.eachCell((cell, colNumber) => {
+            rowData[colNumber] = cell.value;
+          });
+          worksheetData[rowNumber] = rowData;
+        });
+
+        console.log(`${worksheetName} 工作表共${worksheetData.length}行数据`);
+
+        // 查找第三行中含有"服务费"的列
+        if (worksheetData.length < 3) {
+          console.log(`${worksheetName} 工作表数据不足3行`);
+          return null;
+        }
+
+        const thirdRow = worksheetData[2]; // 第三行（索引2）
+        console.log(`第三行数据:`, thirdRow);
+
+        let serviceFeeColIndex = -1;
+        for (let col = 1; col < thirdRow.length; col++) {
+          const cellValue = thirdRow[col];
+          if (cellValue && typeof cellValue === 'string' && cellValue.includes('服务费')) {
+            serviceFeeColIndex = col;
+            console.log(`在第${col + 1}列找到包含"服务费"的单元格: ${cellValue}`);
+            break;
+          }
+        }
+
+        if (serviceFeeColIndex === -1) {
+          console.log(`在${worksheetName}的第三行中未找到包含"服务费"的列`);
+          return null;
+        }
+
+        // 对该列的数据求和（从第四行开始，跳过标题行）
+        let totalAmount = 0;
+        console.log(`开始对第${serviceFeeColIndex + 1}列的数据求和（从第4行开始）`);
+
+        for (let row = 3; row < worksheetData.length; row++) { // 从索引3开始（第4行）
+          const rowData = worksheetData[row];
+          const cellValue = rowData[serviceFeeColIndex];
+
+          if (cellValue !== null && cellValue !== undefined) {
+            let numericValue = 0;
+
+            if (typeof cellValue === 'number') {
+              numericValue = cellValue;
+            } else if (typeof cellValue === 'string') {
+              // 提取字符串中的数字
+              const numberMatch = cellValue.match(/-?\d+\.?\d*/);
+              if (numberMatch) {
+                numericValue = parseFloat(numberMatch[0]);
+              }
+            }
+
+            if (numericValue !== 0) {
+              console.log(`  第${row + 1}行: ${cellValue} -> ${numericValue}`);
+              totalAmount += numericValue;
+            }
+          }
+        }
+
+        console.log(`${worksheetName} 服务费总额: ${totalAmount}`);
+        console.log(`===== ${worksheetName} 服务费总额查找结束 =====`);
+        return totalAmount;
+      };
+
+      // 辅助函数：根据费用类型名称获取对应的工作表名
+      const getWorksheetNameByExpenseType = (expenseType: string): string | null => {
+        const expenseTypeMap: { [key: string]: string } = {
+          '国内机票': '国内机票',
+          '国内酒店': '国内酒店',
+          '火车票': '火车票',
+          '国际机票': '国际机票',
+          '国际酒店': '国际酒店'
+        };
+
+        return expenseTypeMap[expenseType] || null;
+      };
+
       // 在所有工作表处理完成后，处理第九行的总计金额替换
       console.log(`===== 开始处理第九行总计金额替换 =====`);
 
-      // 检查结算单工作表的第九行是否包含"国内机票"
+      // 通用的费用类型处理函数
+      const processExpenseTypeRow = (
+        rowIndex: number,
+        rowDescription: string
+      ) => {
+        console.log(`===== 开始处理第${rowIndex}行 (${rowDescription}) =====`);
+
+        if (!summaryWorksheet) {
+          console.log(`未找到结算单工作表`);
+          return;
+        }
+
+        const targetRow = summaryWorksheet.getRow(rowIndex);
+        if (!targetRow) {
+          console.log(`结算单工作表中没有第${rowIndex}行数据`);
+          return;
+        }
+
+        console.log(`检查结算单第${rowIndex}行数据...`);
+
+        // 查找费用类型名称（如"国内机票"、"国内酒店"等）
+        let expenseTypeColIndex = -1;
+        let expenseType = "";
+
+        for (let col = 1; col <= 50; col++) {
+          const cell = targetRow.getCell(col);
+          const cellValue = cell.value;
+          if (
+            cellValue &&
+            typeof cellValue === "string" &&
+            ["国内机票", "国内酒店", "火车票", "国际机票", "国际酒店"].includes(
+              cellValue
+            )
+          ) {
+            expenseTypeColIndex = col;
+            expenseType = cellValue;
+            console.log(`在第${col}列找到费用类型: ${expenseType}`);
+            break;
+          }
+        }
+
+        if (!expenseType) {
+          console.log(`第${rowIndex}行中未找到有效的费用类型`);
+          return;
+        }
+
+        // 获取第六列的原始值
+        const sixthColCell = targetRow.getCell(6);
+        const originalValue = sixthColCell.value;
+        console.log(`第${rowIndex}行第6列原始值: ${originalValue} (类型: ${typeof originalValue})`);
+
+        // 根据费用类型获取工作表名
+        const worksheetName = getWorksheetNameByExpenseType(expenseType);
+        if (!worksheetName) {
+          console.log(`未找到费用类型"${expenseType}"对应的工作表`);
+          return;
+        }
+
+        console.log(`费用类型"${expenseType}"对应的工作表: ${worksheetName}`);
+
+        // 从对应工作表中查找服务费总额
+        const serviceFeeTotal = getServiceFeeTotal(worksheetName);
+
+        if (serviceFeeTotal !== null) {
+          console.log(`找到${expenseType}的服务费总额: ${serviceFeeTotal}`);
+
+          // 替换第六列的值
+          sixthColCell.value = serviceFeeTotal;
+          console.log(
+            `替换第${rowIndex}行第6列: ${originalValue} -> ${serviceFeeTotal}`
+          );
+        } else {
+          console.log(`未找到${expenseType}的服务费总额，保持原值`);
+        }
+
+        console.log(`===== 第${rowIndex}行 (${rowDescription}) 处理结束 =====`);
+      };
+
+      // 处理第九行（国内机票）- 服务费求和
+      processExpenseTypeRow(9, "国内机票");
+
+      // 处理第九行（国内机票）- 总计金额替换（原有逻辑）
+      console.log(`===== 开始处理第九行国内机票总计金额替换（原有逻辑） =====`);
+
       if (summaryWorksheet) {
         const ninthRow = summaryWorksheet.getRow(9);
         if (ninthRow) {
@@ -1577,7 +1752,6 @@ const generateGroupedExcelFiles = async () => {
           // 遍历第九行的每个单元格，查找"国内机票"
           let domesticFlightColIndex = -1;
           for (let col = 1; col <= 50; col++) {
-            // 检查前50列
             const cell = ninthRow.getCell(col);
             if (cell.value === "国内机票") {
               domesticFlightColIndex = col;
@@ -1587,14 +1761,9 @@ const generateGroupedExcelFiles = async () => {
           }
 
           if (domesticFlightColIndex !== -1) {
-            console.log(
-              `发现国内机票数据，开始从拆分好的工作表中查找合计金额`,
-              newWorkbook
-            );
+            console.log(`发现国内机票数据，开始从拆分好的工作表中查找合计金额`);
 
-            // 从新创建的工作簿中查找国内机票工作表
-            const domesticFlightWorksheet =
-              newWorkbook.getWorksheet("国内机票");
+            const domesticFlightWorksheet = newWorkbook.getWorksheet("国内机票");
             if (domesticFlightWorksheet) {
               console.log(`找到拆分好的国内机票工作表`);
 
@@ -1614,7 +1783,6 @@ const generateGroupedExcelFiles = async () => {
               let totalAmount = null;
               for (let i = domesticFlightData.length - 1; i >= 0; i--) {
                 const row = domesticFlightData[i];
-                // 检查这一行是否包含"合计"或数字
                 const hasTotalText = row.some(
                   cell => typeof cell === "string" && cell.includes("合计")
                 );
@@ -1627,7 +1795,6 @@ const generateGroupedExcelFiles = async () => {
                 if (hasTotalText || hasNumbers) {
                   console.log(`找到合计行（第${i + 1}行）:`, row);
 
-                  // 查找合计行中的数字（最后一个数字是合计金额）
                   for (let j = row.length - 1; j >= 0; j--) {
                     const cell = row[j];
                     if (typeof cell === "number") {
@@ -1648,80 +1815,33 @@ const generateGroupedExcelFiles = async () => {
               if (totalAmount !== null) {
                 console.log(`找到合计金额: ${totalAmount}`);
 
-                // 替换第九行中国内机票对应的总计金额
-                // 根据数据结构 [empty × 3, '国内机票', 5730, 5730, 75, 5805]
-                // '国内机票'在第4列，5805应该在第8列
-                console.log(
-                  `国内机票在第${domesticFlightColIndex}列，开始查找总计金额列`
-                );
-
-                // 打印第九行的完整数据进行调试
-                console.log(`第九行完整数据:`);
-                for (let debugCol = 1; debugCol <= 20; debugCol++) {
-                  const debugCell = ninthRow.getCell(debugCol);
-                  if (
-                    debugCell.value !== null &&
-                    debugCell.value !== undefined
-                  ) {
-                    console.log(
-                      `  第${debugCol}列: ${debugCell.value} (类型: ${typeof debugCell.value})`
-                    );
-                  }
-                }
-
                 // 查找国内机票后面的所有数字列，找到最后一个数字列作为总计金额
                 let allNumberCols: { col: number; value: any }[] = [];
-                for (
-                  let searchCol = domesticFlightColIndex + 1;
-                  searchCol <= 20;
-                  searchCol++
-                ) {
+                for (let searchCol = domesticFlightColIndex + 1; searchCol <= 20; searchCol++) {
                   const searchCell = ninthRow.getCell(searchCol);
-                  if (
-                    searchCell.value !== null &&
-                    searchCell.value !== undefined
-                  ) {
-                    // 检查是否是数字
+                  if (searchCell.value !== null && searchCell.value !== undefined) {
                     if (typeof searchCell.value === "number") {
-                      allNumberCols.push({
-                        col: searchCol,
-                        value: searchCell.value
-                      });
-                      console.log(
-                        `找到数字列: 第${searchCol}列 = ${searchCell.value}`
-                      );
-                    } else if (
-                      typeof searchCell.value === "string" &&
-                      /^\d+\.?\d*$/.test(searchCell.value)
-                    ) {
-                      allNumberCols.push({
-                        col: searchCol,
-                        value: parseFloat(searchCell.value)
-                      });
-                      console.log(
-                        `找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`
-                      );
+                      allNumberCols.push({ col: searchCol, value: searchCell.value });
+                      console.log(`找到数字列: 第${searchCol}列 = ${searchCell.value}`);
+                    } else if (typeof searchCell.value === "string" && /^\d+\.?\d*$/.test(searchCell.value)) {
+                      allNumberCols.push({ col: searchCol, value: parseFloat(searchCell.value) });
+                      console.log(`找到数字字符串列: 第${searchCol}列 = ${searchCell.value}`);
                     }
                   }
                 }
 
-                // 使用最后一个数字列作为总计金额列
                 let targetColIndex = -1;
                 if (allNumberCols.length > 0) {
                   const lastNumberCol = allNumberCols[allNumberCols.length - 1];
                   targetColIndex = lastNumberCol.col;
-                  console.log(
-                    `选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`
-                  );
+                  console.log(`选择最后一个数字列作为总计金额: 第${targetColIndex}列 = ${lastNumberCol.value}`);
                 }
 
                 if (targetColIndex !== -1) {
                   const targetCell = ninthRow.getCell(targetColIndex);
                   const oldValue = targetCell.value;
                   targetCell.value = totalAmount;
-                  console.log(
-                    `替换第九行第${targetColIndex}列: ${oldValue} -> ${totalAmount}`
-                  );
+                  console.log(`替换第九行第${targetColIndex}列（总计金额）: ${oldValue} -> ${totalAmount}`);
                 } else {
                   console.log(`未找到第九行中的总计金额列，请检查数据结构`);
                 }
@@ -1741,8 +1861,23 @@ const generateGroupedExcelFiles = async () => {
         console.log(`未找到结算单工作表`);
       }
 
-      console.log(`===== 第九行总计金额替换处理结束 =====`);
+      console.log(`===== 第九行国内机票总计金额替换处理结束（原有逻辑） =====`);
 
+      // 处理第十一行（国内酒店）
+      processExpenseTypeRow(11, "国内酒店");
+
+      // 处理第十三行（国内火车）
+      processExpenseTypeRow(13, "火车票");
+
+      // 处理第十行（国际机票）
+      processExpenseTypeRow(10, "国际机票");
+
+      // 处理第十二行（国际酒店）
+      processExpenseTypeRow(12, "国际酒店");
+
+      console.log(`===== 所有费用类型服务费总计金额替换处理结束 =====`);
+
+      // 恢复原有的总计金额计算逻辑
       // 处理第十行的国际机票总计金额替换
       console.log(`===== 开始处理第十行国际机票总计金额替换 =====`);
 
