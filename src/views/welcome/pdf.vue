@@ -39,6 +39,85 @@ import Sortable from "sortablejs";
 // 设置PDF.js的worker路径，使用本地worker文件
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
+// Win7兼容性检查
+const checkWin7Compatibility = () => {
+  console.log("=== Win7兼容性检查 ===");
+
+  // 检查浏览器信息
+  const userAgent = navigator.userAgent;
+  const platform = navigator.platform;
+
+  console.log("用户代理:", userAgent);
+  console.log("平台:", platform);
+
+  // 检测是否为Windows 7
+  const isWindows7 =
+    userAgent.includes("Windows NT 6.1") || userAgent.includes("Windows 7");
+
+  if (isWindows7) {
+    console.warn("检测到Windows 7系统");
+    console.warn("可能的兼容性问题:");
+    console.warn("1. Worker支持问题");
+    console.warn("2. Promise支持问题");
+    console.warn("3. ArrayBuffer支持问题");
+    console.warn("4. 现代JavaScript特性支持问题");
+
+    return {
+      isWindows7: true,
+      warnings: [
+        "Worker支持问题",
+        "Promise支持问题",
+        "ArrayBuffer支持问题",
+        "现代JavaScript特性支持问题"
+      ]
+    };
+  }
+
+  // 检查关键API支持
+  const features = {
+    worker: typeof Worker !== "undefined",
+    promise: typeof Promise !== "undefined",
+    arrayBuffer: typeof ArrayBuffer !== "undefined",
+    fileReader: typeof FileReader !== "undefined",
+    blob: typeof Blob !== "undefined",
+    url: typeof URL !== "undefined" && URL.createObjectURL
+  };
+
+  console.log("浏览器特性支持检查:", features);
+
+  const unsupportedFeatures = Object.entries(features)
+    .filter(([name, supported]) => !supported)
+    .map(([name]) => name);
+
+  if (unsupportedFeatures.length > 0) {
+    console.error("不支持的特性:", unsupportedFeatures);
+    return {
+      isWindows7: false,
+      unsupportedFeatures
+    };
+  }
+
+  console.log("浏览器特性支持良好");
+  return { isWindows7: false, features };
+};
+
+// 降级处理方案
+const createFallbackProcessing = () => {
+  console.log("创建降级处理方案");
+
+  // 如果不支持Worker，禁用PDF.js worker
+  if (typeof Worker === "undefined") {
+    console.warn("Worker不支持，禁用PDF.js worker");
+    pdfjsLib.GlobalWorkerOptions.workerSrc = null;
+  }
+
+  // 如果不支持Promise，提供简单提示
+  if (typeof Promise === "undefined") {
+    console.error("Promise不支持，无法进行异步处理");
+    throw new Error("浏览器不支持Promise，请升级浏览器或使用现代浏览器");
+  }
+};
+
 defineOptions({
   name: "PdfBatchRename"
 });
@@ -459,48 +538,135 @@ const extractZipFile = async (zipFileData: File): Promise<FileItem[]> => {
 
 // 处理单个PDF文件
 const processPdfFile = async (fileItem: FileItem): Promise<void> => {
+  const startTime = Date.now();
+  console.log(`开始处理文件: ${fileItem.originalName} (ID: ${fileItem.id})`);
+
   try {
+    console.log(`[${fileItem.originalName}] 设置状态为处理中`);
     fileItem.status = "processing";
     fileItem.progress = 10;
 
     if (!fileItem.file) {
+      console.error(`[${fileItem.originalName}] 文件对象不存在`);
       throw new Error("文件不存在");
     }
 
-    // 读取PDF文件内容
+    console.log(`[${fileItem.originalName}] 文件信息:`, {
+      size: `${(fileItem.file.size / 1024 / 1024).toFixed(2)}MB`,
+      type: fileItem.file.type,
+      lastModified: new Date(fileItem.file.lastModified).toISOString()
+    });
+
+    console.log(`[${fileItem.originalName}] 开始读取文件到 ArrayBuffer`);
+    const readStartTime = Date.now();
     const arrayBuffer = await fileItem.file.arrayBuffer();
+    const readEndTime = Date.now();
+    console.log(
+      `[${fileItem.originalName}] 文件读取完成，耗时: ${readEndTime - readStartTime}ms`
+    );
+    console.log(
+      `[${fileItem.originalName}] ArrayBuffer 大小: ${arrayBuffer.byteLength} bytes`
+    );
     fileItem.progress = 30;
+
+    console.log(`[${fileItem.originalName}] 开始加载PDF文档`);
+    const pdfStartTime = Date.now();
+
+    // 检查PDF.js的可用性
+    if (!pdfjsLib || !pdfjsLib.getDocument) {
+      console.error(`[${fileItem.originalName}] PDF.js 不可用`);
+      throw new Error("PDF.js 库不可用");
+    }
+
+    console.log(
+      `[${fileItem.originalName}] PDF.js 版本信息:`,
+      pdfjsLib.version || "未知"
+    );
 
     // 使用PDF.js解析PDF内容
     const loadingTask = pdfjsLib.getDocument({
       data: arrayBuffer,
       useWorkerFetch: false,
       isEvalSupported: false,
-      useSystemFonts: true
+      useSystemFonts: true,
+      // 添加更多兼容性选项
+      disableAutoFetch: true,
+      disableStream: true
     });
+
+    console.log(`[${fileItem.originalName}] PDF loadingTask 创建完成`);
+
     const pdf = await loadingTask.promise;
+    const pdfEndTime = Date.now();
+    console.log(
+      `[${fileItem.originalName}] PDF文档加载完成，耗时: ${pdfEndTime - pdfStartTime}ms`
+    );
+    console.log(`[${fileItem.originalName}] PDF信息:`, {
+      numPages: pdf.numPages,
+      fingerprint: pdf.fingerprints || "N/A"
+    });
     fileItem.progress = 50;
 
+    console.log(`[${fileItem.originalName}] 开始提取文本内容`);
+    const textExtractionStartTime = Date.now();
     let pdfText = "";
+
     // 提取所有页面的文本
     for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(" ");
-      pdfText += pageText + " ";
+      console.log(`[${fileItem.originalName}] 处理第 ${i}/${pdf.numPages} 页`);
+      try {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(" ");
+        pdfText += pageText + " ";
+        console.log(
+          `[${fileItem.originalName}] 第 ${i} 页文本提取完成，长度: ${pageText.length}`
+        );
+      } catch (pageError) {
+        console.error(
+          `[${fileItem.originalName}] 第 ${i} 页处理失败:`,
+          pageError
+        );
+        // 继续处理其他页面
+      }
     }
+
+    const textExtractionEndTime = Date.now();
+    console.log(
+      `[${fileItem.originalName}] 文本提取完成，总耗时: ${textExtractionEndTime - textExtractionStartTime}ms`
+    );
+    console.log(
+      `[${fileItem.originalName}] 提取的文本总长度: ${pdfText.length}`
+    );
+    console.log(
+      `[${fileItem.originalName}] 文本预览:`,
+      pdfText.substring(0, 200) + (pdfText.length > 200 ? "..." : "")
+    );
     fileItem.progress = 70;
+
+    console.log(`[${fileItem.originalName}] 开始信息提取`);
+    const extractionStartTime = Date.now();
 
     // 提取信息
     const companyName = extractCompanyName(fileItem.originalName);
+    console.log(`[${fileItem.originalName}] 公司名称: "${companyName}"`);
+
     const expenseType = determineExpenseType(pdfText);
+    console.log(`[${fileItem.originalName}] 费用类型: "${expenseType}"`);
+
     const amount = extractAmount(pdfText);
+    console.log(`[${fileItem.originalName}] 金额: "${amount}"`);
 
     fileItem.companyName = companyName;
     fileItem.expenseType = expenseType;
 
     // 使用格式化函数处理金额显示
     const formattedAmount = formatAmount(amount);
+    console.log(
+      `[${fileItem.originalName}] 格式化后金额: "${formattedAmount}"`
+    );
     fileItem.amount = formattedAmount;
     fileItem.progress = 90;
 
@@ -508,11 +674,39 @@ const processPdfFile = async (fileItem: FileItem): Promise<void> => {
     const newFileName = sanitizeFileName(
       `${companyName}_${expenseType}${formattedAmount}.pdf`
     );
+    console.log(`[${fileItem.originalName}] 新文件名: "${newFileName}"`);
     fileItem.newName = newFileName;
     fileItem.progress = 100;
     fileItem.status = "success";
+
+    const endTime = Date.now();
+    console.log(
+      `[${fileItem.originalName}] 处理成功，总耗时: ${endTime - startTime}ms`
+    );
   } catch (error) {
-    console.log("error: ", error);
+    const endTime = Date.now();
+    console.error(
+      `[${fileItem.originalName}] 处理失败，耗时: ${endTime - startTime}ms`
+    );
+    console.error(`[${fileItem.originalName}] 错误详情:`, {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
+
+    // 检查常见的Win7兼容性问题
+    if (error.message && error.message.includes("Worker")) {
+      console.error(
+        `[${fileItem.originalName}] 检测到Worker相关问题，可能是Win7兼容性问题`
+      );
+    }
+
+    if (error.message && error.message.includes("Promise")) {
+      console.error(
+        `[${fileItem.originalName}] 检测到Promise相关问题，可能是浏览器兼容性问题`
+      );
+    }
+
     fileItem.status = "error";
     fileItem.errorMessage = error instanceof Error ? error.message : "处理失败";
     fileItem.progress = 0;
@@ -587,20 +781,77 @@ const handleFileChange: UploadProps["onChange"] = async uploadFile => {
 
 // 批量处理所有文件
 const processAllFiles = async () => {
+  console.log("=== 开始批量处理文件 ===");
+  console.log("当前时间:", new Date().toISOString());
+  console.log("用户代理:", navigator.userAgent);
+  console.log("操作系统:", navigator.platform);
+  console.log("文件总数:", fileList.value.length);
+
+  // 执行兼容性检查
+  console.log("执行兼容性检查...");
+  const compatibilityCheck = checkWin7Compatibility();
+
+  if (compatibilityCheck.isWindows7) {
+    console.warn("在Windows 7系统上运行，启用兼容性模式");
+    ElMessage.info("检测到Windows 7系统，正在使用兼容性模式处理");
+
+    // 创建降级处理方案
+    createFallbackProcessing();
+  }
+
+  if (
+    compatibilityCheck.unsupportedFeatures &&
+    compatibilityCheck.unsupportedFeatures.length > 0
+  ) {
+    console.error(
+      "浏览器不支持关键特性:",
+      compatibilityCheck.unsupportedFeatures
+    );
+    ElMessage.error(
+      `浏览器不支持关键功能: ${compatibilityCheck.unsupportedFeatures.join(", ")}，请升级浏览器`
+    );
+    return;
+  }
+
   if (fileList.value.length === 0) {
+    console.log("没有文件需要处理");
     ElMessage.warning("请先选择PDF文件");
     return;
   }
 
+  console.log("文件列表详情:");
+  fileList.value.forEach((item, index) => {
+    console.log(`文件 ${index + 1}:`, {
+      id: item.id,
+      name: item.originalName,
+      status: item.status,
+      fileSize: item.file
+        ? `${(item.file.size / 1024 / 1024).toFixed(2)}MB`
+        : "N/A"
+    });
+  });
+
+  const pendingFiles = fileList.value.filter(item => item.status === "pending");
+  console.log("待处理文件数量:", pendingFiles.length);
+
   isProcessing.value = true;
 
   try {
-    // 并发处理所有文件
-    const promises = fileList.value
-      .filter(item => item.status === "pending")
-      .map(item => processPdfFile(item));
+    console.log("开始并发处理文件...");
+    const startTime = Date.now();
 
+    // 并发处理所有文件
+    const promises = pendingFiles.map((item, index) => {
+      console.log(`创建处理任务 ${index + 1}:`, item.originalName);
+      return processPdfFile(item);
+    });
+
+    console.log("等待所有文件处理完成...");
     await Promise.all(promises);
+
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+    console.log(`批量处理完成，耗时: ${processingTime}ms`);
 
     const successCount = fileList.value.filter(
       item => item.status === "success"
@@ -608,6 +859,25 @@ const processAllFiles = async () => {
     const errorCount = fileList.value.filter(
       item => item.status === "error"
     ).length;
+
+    console.log("处理结果统计:", {
+      success: successCount,
+      error: errorCount,
+      total: fileList.value.length,
+      processingTime: `${processingTime}ms`
+    });
+
+    // 显示错误详情
+    const errorFiles = fileList.value.filter(item => item.status === "error");
+    if (errorFiles.length > 0) {
+      console.error("处理失败的文件:");
+      errorFiles.forEach((file, index) => {
+        console.error(`失败文件 ${index + 1}:`, {
+          name: file.originalName,
+          error: file.errorMessage
+        });
+      });
+    }
 
     if (errorCount === 0) {
       ElMessage.success(`成功处理 ${successCount} 个文件`);
@@ -617,9 +887,16 @@ const processAllFiles = async () => {
       );
     }
   } catch (error) {
-    ElMessage.error("批量处理失败");
+    console.error("批量处理过程中发生异常:", error);
+    console.error("错误详情:", {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    ElMessage.error("批量处理失败: " + (error.message || "未知错误"));
   } finally {
     isProcessing.value = false;
+    console.log("=== 批量处理结束 ===");
   }
 };
 
@@ -1110,20 +1387,31 @@ const initDragSort = () => {
       let tbody = null;
 
       // 方式1：通过ref获取（如果ref是DOM元素）
-      if (mergeTableRef.value && typeof mergeTableRef.value.querySelector === 'function') {
-        tbody = mergeTableRef.value.querySelector('.el-table__body-wrapper tbody');
+      if (
+        mergeTableRef.value &&
+        typeof mergeTableRef.value.querySelector === "function"
+      ) {
+        tbody = mergeTableRef.value.querySelector(
+          ".el-table__body-wrapper tbody"
+        );
       }
 
       // 方式2：直接通过类名查找
       if (!tbody) {
-        tbody = document.querySelector('.merge-file-list-section .el-table__body-wrapper tbody');
+        tbody = document.querySelector(
+          ".merge-file-list-section .el-table__body-wrapper tbody"
+        );
       }
 
       // 方式3：通过data-ref或其他属性查找
       if (!tbody) {
-        const tables = document.querySelectorAll('.merge-file-list-section .el-table');
+        const tables = document.querySelectorAll(
+          ".merge-file-list-section .el-table"
+        );
         tables.forEach(table => {
-          const foundTbody = table.querySelector('.el-table__body-wrapper tbody');
+          const foundTbody = table.querySelector(
+            ".el-table__body-wrapper tbody"
+          );
           if (foundTbody) {
             tbody = foundTbody;
           }
@@ -1131,7 +1419,7 @@ const initDragSort = () => {
       }
 
       if (tbody) {
-        console.log('找到tbody元素，初始化拖拽排序');
+        console.log("找到tbody元素，初始化拖拽排序");
 
         // 销毁之前的实例
         if (sortableInstance) {
@@ -1141,26 +1429,32 @@ const initDragSort = () => {
 
         sortableInstance = Sortable.create(tbody as HTMLElement, {
           animation: 150,
-          ghostClass: 'sortable-ghost',
-          chosenClass: 'sortable-chosen',
-          dragClass: 'sortable-drag',
-          handle: '.cursor-move, .el-icon', // 限制只能在图标区域拖拽
-          onEnd: (evt) => {
+          ghostClass: "sortable-ghost",
+          chosenClass: "sortable-chosen",
+          dragClass: "sortable-drag",
+          handle: ".cursor-move, .el-icon", // 限制只能在图标区域拖拽
+          onEnd: evt => {
             const oldIndex = evt.oldIndex as number;
             const newIndex = evt.newIndex as number;
 
-            if (oldIndex !== newIndex && oldIndex !== undefined && newIndex !== undefined) {
+            if (
+              oldIndex !== newIndex &&
+              oldIndex !== undefined &&
+              newIndex !== undefined
+            ) {
               // 更新数组顺序
               const [movedItem] = mergeFileList.value.splice(oldIndex, 1);
               mergeFileList.value.splice(newIndex, 0, movedItem);
 
               ElMessage.success(`文件已移动到第 ${newIndex + 1} 位`);
-              console.log(`文件从第 ${oldIndex + 1} 位移动到第 ${newIndex + 1} 位`);
+              console.log(
+                `文件从第 ${oldIndex + 1} 位移动到第 ${newIndex + 1} 位`
+              );
             }
           }
         });
       } else {
-        console.warn('未找到可拖拽的表格tbody元素');
+        console.warn("未找到可拖拽的表格tbody元素");
       }
     }, 100); // 增加延迟确保DOM渲染完成
   });
@@ -1222,10 +1516,53 @@ const clearMergeFiles = () => {
 
 // 生命周期钩子
 onMounted(() => {
+  console.log("=== PDF处理页面加载完成 ===");
+
+  // 页面加载时立即执行兼容性检查
+  const compatibilityCheck = checkWin7Compatibility();
+
+  if (compatibilityCheck.isWindows7) {
+    console.warn("运行环境: Windows 7");
+    ElMessage.warning(
+      "检测到Windows 7系统，建议使用Chrome 60+或Firefox 55+浏览器以获得最佳兼容性"
+    );
+
+    // 预先创建降级处理方案
+    createFallbackProcessing();
+  }
+
+  if (
+    compatibilityCheck.unsupportedFeatures &&
+    compatibilityCheck.unsupportedFeatures.length > 0
+  ) {
+    console.error(
+      "不支持的浏览器特性:",
+      compatibilityCheck.unsupportedFeatures
+    );
+    ElMessage.error(
+      `您的浏览器不支持以下功能: ${compatibilityCheck.unsupportedFeatures.join(", ")}，请升级浏览器`
+    );
+  }
+
+  console.log("PDF.js初始化检查:");
+  console.log("- PDF.js版本:", pdfjsLib.version || "未知");
+  console.log(
+    "- Worker路径:",
+    pdfjsLib.GlobalWorkerOptions.workerSrc || "未设置"
+  );
+  console.log(
+    "- PDF.getDocument可用:",
+    typeof pdfjsLib.getDocument === "function"
+  );
+
   // 监听文件列表变化，重新初始化拖拽排序
-  const unwatch = watch(mergeFileList, () => {
-    initDragSort();
-  }, { deep: true });
+  const unwatch = watch(
+    mergeFileList,
+    () => {
+      initDragSort();
+    },
+    { deep: true }
+  );
 
   // 清理函数
   onUnmounted(() => {
@@ -1264,7 +1601,9 @@ const mergePdfs = async () => {
 
     // 保存合并后的PDF
     const mergedPdfBytes = await mergedPdf.save();
-    const mergedPdfBlob = new Blob([mergedPdfBytes as BlobPart], { type: "application/pdf" });
+    const mergedPdfBlob = new Blob([mergedPdfBytes as BlobPart], {
+      type: "application/pdf"
+    });
 
     // 生成下载文件名
     const downloadFileName = mergedFileName.value.endsWith(".pdf")
@@ -1715,7 +2054,11 @@ const mergePdfs = async () => {
         </el-upload>
       </div>
 
-      <div class="merge-file-list-section" v-if="mergeFileList.length > 0" ref="mergeTableRef">
+      <div
+        class="merge-file-list-section"
+        v-if="mergeFileList.length > 0"
+        ref="mergeTableRef"
+      >
         <h3 class="text-lg font-semibold mb-4">
           合并文件列表 ({{ mergeFileList.length }})
           <el-tag
@@ -1945,7 +2288,9 @@ const mergePdfs = async () => {
 .sortable-drag {
   opacity: 0.8;
   background-color: #d1d5db !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .cursor-move {
