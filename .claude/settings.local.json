@@ -6,7 +6,8 @@
       "Bash(node:*)",
       "Bash(ping:*)",
       "Bash(git push:*)",
-      "Bash(nslookup:*)"
+      "Bash(nslookup:*)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

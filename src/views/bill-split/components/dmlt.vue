@@ -1169,8 +1169,23 @@ const generateGroupedExcelFiles = async () => {
 
           newCell.value = cellValue;
 
-          // 复制样式
-          newCell.style = cell.style;
+          // 增强样式复制 - 确保背景色等样式正确传递
+          if (cell.style) {
+            // 深度复制样式对象，确保所有属性都被正确复制
+            const enhancedStyle = {
+              font: cell.style.font ? { ...cell.style.font } : undefined,
+              alignment: cell.style.alignment
+                ? { ...cell.style.alignment }
+                : undefined,
+              border: cell.style.border ? { ...cell.style.border } : undefined,
+              fill: cell.style.fill ? { ...cell.style.fill } : undefined,
+              numFmt: cell.style.numFmt,
+              protection: cell.style.protection
+                ? { ...cell.style.protection }
+                : undefined
+            };
+            newCell.style = enhancedStyle;
+          }
         });
       });
 
@@ -2757,6 +2772,70 @@ const generateGroupedExcelFiles = async () => {
         }
       }
       console.log(`===== 最终确认隐藏设置完成 =====`);
+
+      // 在生成Excel文件前，最后确保背景色和边框设置
+      console.log("在生成Excel前最终设置dmlt文件的背景色和边框...");
+      const finalSummaryWorksheet = newWorkbook.getWorksheet("结算单");
+      if (finalSummaryWorksheet) {
+        // 确保第8行 (C8-G8) 有背景色 #d9e1f4
+        const finalRow8 = finalSummaryWorksheet.getRow(8);
+        for (let col = 3; col <= 7; col++) {
+          const finalCell = finalRow8.getCell(col);
+          finalCell.style = {
+            ...finalCell.style,
+            fill: {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFD9E1F4" } // #d9e1f4 浅蓝色
+            }
+          };
+        }
+
+        // 确保第18行 (C18-G18) 有背景色 #d9e1f4
+        const finalRow18 = finalSummaryWorksheet.getRow(18);
+        for (let col = 3; col <= 7; col++) {
+          const finalCell = finalRow18.getCell(col);
+          finalCell.style = {
+            ...finalCell.style,
+            fill: {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFD9E1F4" } // #d9e1f4 浅蓝色
+            }
+          };
+        }
+
+        // 确保第23行 (C23-G23) 有细下线框 #95b3d7
+        const finalRow23 = finalSummaryWorksheet.getRow(23);
+        for (let col = 3; col <= 7; col++) {
+          const finalCell = finalRow23.getCell(col);
+          finalCell.style = {
+            ...finalCell.style,
+            border: {
+              ...finalCell.style?.border,
+              bottom: {
+                style: "thin",
+                color: { argb: "FF95B3D7" } // #95b3d7 蓝色
+              }
+            }
+          };
+        }
+
+        // 确保第25行 (C25-G25) 有背景色 #fff3ca
+        const finalRow25 = finalSummaryWorksheet.getRow(25);
+        for (let col = 3; col <= 7; col++) {
+          const finalCell = finalRow25.getCell(col);
+          finalCell.style = {
+            ...finalCell.style,
+            fill: {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFFFF3CA" } // #fff3ca 浅黄色
+            }
+          };
+        }
+        console.log("dmlt文件背景色和边框最终设置完成");
+      }
 
       // 生成Excel文件内容
       const excelBuffer = await newWorkbook.xlsx.writeBuffer();
