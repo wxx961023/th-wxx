@@ -1071,36 +1071,20 @@ const generateGroupedExcelFiles = async () => {
               }
             }
 
-            // 动态计算上个月的最后一天（处理上个月的账单）
+            // 动态计算当前月的最后一天
             if (cellValue.includes("最晚结算日：")) {
               const now = new Date();
               const currentYear = now.getFullYear();
               const currentMonth = now.getMonth(); // 0-11
 
-              // 计算上个月的年月
-              let targetYear, targetMonth;
-
-              if (currentMonth === 0) {
-                // 当前是1月，上个月是去年的12月
-                targetYear = currentYear - 1;
-                targetMonth = 12;
-              } else {
-                targetYear = currentYear;
-                targetMonth = currentMonth;
-              }
-
-              // 计算上个月的最后一天：当前月份第1天减去1天
-              const currentMonthFirstDay = new Date(
-                currentYear,
-                currentMonth,
-                1
-              );
-              const lastDayOfTargetMonth = new Date(
-                currentMonthFirstDay.getTime() - 24 * 60 * 60 * 1000
+              // 计算当前月的最后一天：下个月的第1天减去1天
+              const nextMonthFirstDay = new Date(currentYear, currentMonth + 1, 1);
+              const lastDayOfCurrentMonth = new Date(
+                nextMonthFirstDay.getTime() - 24 * 60 * 60 * 1000
               );
 
               // 格式化为 YYYY-MM-DD
-              const formattedDate = `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(lastDayOfTargetMonth.getDate()).padStart(2, "0")}`;
+              const formattedDate = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(lastDayOfCurrentMonth.getDate()).padStart(2, "0")}`;
 
               cellValue = cellValue.replace(
                 /最晚结算日：\d{4}-\d{2}-\d{2}/,

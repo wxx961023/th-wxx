@@ -64,6 +64,11 @@ const companyConfig: CompanyConfig = {
       shortName: "苏州创鑫激光",
       contact: "魏函",
       phone: "17356949230"
+    },
+    武汉创鑫激光科技有限公司: {
+      shortName: "武汉创鑫激光",
+      contact: "黄放",
+      phone: "13986152289"
     }
   },
 
