@@ -2805,6 +2805,22 @@ const generateGroupedExcelFiles = async () => {
           };
         }
 
+        // 确保第21行 (C21-G21) 有上细线框 #95b3d7
+        const finalRow21 = finalSummaryWorksheet.getRow(21);
+        for (let col = 3; col <= 7; col++) {
+          const finalCell = finalRow21.getCell(col);
+          finalCell.style = {
+            ...finalCell.style,
+            border: {
+              ...finalCell.style?.border,
+              top: {
+                style: "thin",
+                color: { argb: "FF95B3D7" } // #95b3d7 蓝色
+              }
+            }
+          };
+        }
+
         // 确保第23行 (C23-G23) 有细下线框 #95b3d7
         const finalRow23 = finalSummaryWorksheet.getRow(23);
         for (let col = 3; col <= 7; col++) {
