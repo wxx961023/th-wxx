@@ -1,25 +1,25 @@
 // 公司信息配置文件
 export interface CompanyInfo {
-  shortName: string;
-  contact: string;
-  phone: string;
+  shortName: string
+  contact: string
+  phone: string
 }
 
 export interface PersonInfo {
-  fullName: string; // 公司全称
-  shortName: string;
-  contact: string;
-  phone: string;
+  fullName: string // 公司全称
+  shortName: string
+  contact: string
+  phone: string
 }
 
 export interface CompanyConfig {
-  nameMapping: Record<string, CompanyInfo>;
-  getCompanyInfo(fullName: string): CompanyInfo;
+  nameMapping: Record<string, CompanyInfo>
+  getCompanyInfo(fullName: string): CompanyInfo
 }
 
 export interface PersonConfig {
-  nameMapping: Record<string, PersonInfo>;
-  getPersonInfo(personName: string): PersonInfo;
+  nameMapping: Record<string, PersonInfo>
+  getPersonInfo(personName: string): PersonInfo
 }
 
 const companyConfig: CompanyConfig = {
@@ -80,9 +80,9 @@ const companyConfig: CompanyConfig = {
         contact: "",
         phone: ""
       }
-    );
+    )
   }
-};
+}
 
 // 大梦龙途人员配置
 const personConfig: PersonConfig = {
@@ -95,16 +95,16 @@ const personConfig: PersonConfig = {
       phone: "13538774228"
     },
     洪晴: {
-      fullName: "待补充", // 暂时使用默认值，等用户补充
+      fullName: "湖南大梦龙途文化传播有限公司", // 暂时使用默认值，等用户补充
       shortName: "洪晴",
       contact: "洪晴",
       phone: "16670917363"
     },
-    王梓懿: {
+    万语馨: {
       fullName: "深圳市大梦龙途文化传播有限公司", // 暂时使用默认值，等用户补充
-      shortName: "王梓懿",
-      contact: "王梓懿",
-      phone: "13824342455"
+      shortName: "万语馨",
+      contact: "万语馨",
+      phone: "17727420275"
     }
   },
 
@@ -117,9 +117,9 @@ const personConfig: PersonConfig = {
         contact: personName,
         phone: ""
       }
-    );
+    )
   }
-};
+}
 
-export default companyConfig;
-export { personConfig };
+export default companyConfig
+export { personConfig }
