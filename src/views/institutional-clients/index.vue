@@ -67,6 +67,10 @@ const loadClientData = async () => {
       console.log('📊 处理后的数据样例:', clientList.value[0])
     } else {
       console.error('❌ API返回失败:', response)
+      if (response.code == 401) {
+        ElMessage.error('请重新登录');
+        return
+      }
       ElMessage.error(response.message || '获取机构客户数据失败');
     }
   } catch (error: any) {
