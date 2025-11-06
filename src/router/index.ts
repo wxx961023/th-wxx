@@ -81,15 +81,37 @@ const billSplitRoute: RouteRecordRaw = {
   ]
 }
 
+/** 机构客户路由 */
+const institutionalClientsRoute: RouteRecordRaw = {
+  path: "/institutional-clients",
+  name: "InstitutionalClientsModule",
+  component: () => import("@/layout/index.vue"),
+  redirect: "/institutional-clients/index",
+  meta: {
+    icon: "ep:office-building",
+    title: "机构客户",
+    rank: 3
+  },
+  children: [
+    {
+      path: "/institutional-clients/index",
+      name: "InstitutionalClientsIndex",
+      component: () => import("@/views/institutional-clients/index.vue"),
+      meta: {
+        title: "机构客户"
+      }
+    }
+  ]
+}
 
 /** 导出静态路由 */
-export const constantRoutes: Array<RouteRecordRaw> = [homeRoute, pdfRoute, billSplitRoute]
+export const constantRoutes: Array<RouteRecordRaw> = [homeRoute, pdfRoute, billSplitRoute, institutionalClientsRoute]
 
 /** 初始的静态路由，用于退出登录时重置路由 */
 const initConstantRoutes: Array<RouteRecordRaw> = cloneDeep(constantRoutes)
 
 /** 用于渲染菜单，保持原始层级 */
-export const constantMenus: Array<any> = [homeRoute, pdfRoute, billSplitRoute]
+export const constantMenus: Array<any> = [homeRoute, pdfRoute, billSplitRoute, institutionalClientsRoute]
 
 /** 不参与菜单的路由 */
 export const remainingPaths = Object.keys(remainingRouter).map(v => {
