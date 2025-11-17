@@ -3,6 +3,8 @@ export interface CompanyInfo {
   shortName: string
   contact: string
   phone: string
+  otherFullName?: string
+
 }
 
 export interface PersonInfo {
@@ -41,7 +43,13 @@ const companyConfig: CompanyConfig = {
       phone: "13620930071"
     },
     深圳市创鑫激光股份有限公司北京技术分公司: {
-      shortName: "创鑫激光股份-北京技术分公司",
+      shortName: "北京创鑫智造激光",
+      otherFullName: "北京创鑫智造激光科技有限公司",
+      contact: "冯萌",
+      phone: "15033218468"
+    },
+    北京创鑫智造激光科技有限公司: {
+      shortName: "北京创鑫智造激光",
       contact: "冯萌",
       phone: "15033218468"
     },

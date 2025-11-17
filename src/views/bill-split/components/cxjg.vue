@@ -1015,12 +1015,16 @@ const generateGroupedExcelFiles = async () => {
           if (typeof cellValue === "string") {
             let hasChanges = false;
             const originalValue = cellValue;
+            // 结算单内的公司名称
+            const companyName =
+              companyConfig.getCompanyInfo(companyGroup.groupName)
+                .otherFullName || companyGroup.groupName;
 
             // 替换《》内的公司名称
             if (cellValue.includes("《") && cellValue.includes("》")) {
               cellValue = cellValue.replace(
                 /《([^》]+)》/g,
-                `《${companyGroup.groupName}》`
+                `《${companyName}》`
               );
               hasChanges = true;
             }
@@ -1029,7 +1033,7 @@ const generateGroupedExcelFiles = async () => {
             if (cellValue.includes("收件方：")) {
               cellValue = cellValue.replace(
                 /收件方：[^，,\n]+/,
-                `收件方：${companyGroup.groupName}`
+                `收件方：${companyName}`
               );
               hasChanges = true;
             }
@@ -1121,7 +1125,7 @@ const generateGroupedExcelFiles = async () => {
               // 替换结算款项描述
               cellValue = cellValue.replace(
                 /本公司\d{4}-\d{2}-\d{2}至\d{4}-\d{2}-\d{2}与贵公司\([^)]+\)的结算款项列示如下：/,
-                `本公司${startDate}至${endDate}与贵公司(${companyGroup.groupName})的结算款项列示如下：`
+                `本公司${startDate}至${endDate}与贵公司(${companyName})的结算款项列示如下：`
               );
               hasChanges = true;
             }
