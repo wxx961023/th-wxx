@@ -1708,13 +1708,21 @@ const generateGroupedExcelFiles = async () => {
           if (
             cellValue &&
             typeof cellValue === "string" &&
-            ["国内机票", "国内酒店", "火车票", "国际机票", "国际酒店"].includes(
-              cellValue
-            )
+            [
+              "国内机票",
+              "国内酒店",
+              "火车票",
+              "国内火车",
+              "国际机票",
+              "国际酒店"
+            ].includes(cellValue)
           ) {
             expenseTypeColIndex = col;
-            expenseType = cellValue;
-            console.log(`在第${col}列找到费用类型: ${expenseType}`);
+            // 统一将"国内火车"映射为"火车票"
+            expenseType = cellValue === "国内火车" ? "火车票" : cellValue;
+            console.log(
+              `在第${col}列找到费用类型: ${cellValue}${cellValue === "国内火车" ? " (映射为火车票)" : ""}`
+            );
             break;
           }
         }
@@ -2448,26 +2456,26 @@ const generateGroupedExcelFiles = async () => {
       // 处理第十三行的国内火车总计金额替换
       console.log(`===== 开始处理第十三行国内火车总计金额替换 =====`);
 
-      // 检查结算单工作表的第十三行是否包含"国内火车"
+      // 检查结算单工作表的第十三行是否包含"国内火车"或"火车票"
       if (summaryWorksheet) {
         const thirteenthRow = summaryWorksheet.getRow(13);
         if (thirteenthRow) {
           console.log(`检查结算单第十三行数据...`);
 
-          // 遍历第十三行的每个单元格，查找"国内火车"
+          // 遍历第十三行的每个单元格，查找"国内火车"或"火车票"
           let domesticTrainColIndex = -1;
           for (let col = 1; col <= 50; col++) {
             // 检查前50列
             const cell = thirteenthRow.getCell(col);
-            if (cell.value === "国内火车") {
+            if (cell.value === "国内火车" || cell.value === "火车票") {
               domesticTrainColIndex = col;
-              console.log(`在第${col}列找到"国内火车"`);
+              console.log(`在第${col}列找到"${cell.value}"`);
               break;
             }
           }
 
           if (domesticTrainColIndex !== -1) {
-            console.log(`发现国内火车数据，开始从拆分好的工作表中查找合计金额`);
+            console.log(`发现火车票数据，开始从拆分好的工作表中查找合计金额`);
 
             // 从新创建的工作簿中查找火车票工作表
             const trainWorksheet = newWorkbook.getWorksheet("火车票");
@@ -2524,9 +2532,9 @@ const generateGroupedExcelFiles = async () => {
               if (totalAmount !== null) {
                 console.log(`找到合计金额: ${totalAmount}`);
 
-                // 替换第十三行中国内火车对应的总计金额
+                // 替换第十三行中火车票对应的总计金额
                 console.log(
-                  `国内火车在第${domesticTrainColIndex}列，开始查找总计金额列`
+                  `火车票在第${domesticTrainColIndex}列，开始查找总计金额列`
                 );
 
                 // 打印第十三行的完整数据进行调试
@@ -2543,7 +2551,7 @@ const generateGroupedExcelFiles = async () => {
                   }
                 }
 
-                // 查找国内火车后面的所有数字列，找到最后一个数字列作为总计金额
+                // 查找火车票后面的所有数字列，找到最后一个数字列作为总计金额
                 let allNumberCols: { col: number; value: any }[] = [];
                 for (
                   let searchCol = domesticTrainColIndex + 1;
@@ -2606,7 +2614,7 @@ const generateGroupedExcelFiles = async () => {
               console.log(`新工作簿中没有找到火车票工作表`);
             }
           } else {
-            console.log(`第十三行中未找到"国内火车"数据`);
+            console.log(`第十三行中未找到"国内火车"或"火车票"数据`);
           }
         } else {
           console.log(`结算单工作表中没有第十三行数据`);
@@ -2615,7 +2623,7 @@ const generateGroupedExcelFiles = async () => {
         console.log(`未找到结算单工作表`);
       }
 
-      console.log(`===== 第十三行国内火车总计金额替换处理结束 =====`);
+      console.log(`===== 第十三行火车票总计金额替换处理结束 =====`);
 
       // 处理第九行到十三行的折叠逻辑（如果总计金额为0）
       console.log(`===== 开始处理第九行到十七行折叠逻辑 =====`);
