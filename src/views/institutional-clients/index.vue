@@ -1,9 +1,21 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { Search, Refresh, Plus, Edit, Delete, Download, CaretBottom } from "@element-plus/icons-vue";
+import {
+  Search,
+  Refresh,
+  Plus,
+  Edit,
+  Delete,
+  Download,
+  CaretBottom
+} from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { searchCorps, type CorpSearchRequest, type CorpItem } from "@/api/institutional-clients";
-import * as XLSX from 'xlsx';
+import {
+  searchCorps,
+  type CorpSearchRequest,
+  type CorpItem
+} from "@/api/institutional-clients";
+import * as XLSX from "xlsx";
 
 defineOptions({
   name: "InstitutionalClientsIndex"
@@ -13,6 +25,7 @@ defineOptions({
 const loading = ref(false);
 const clientList = ref<CorpItem[]>([]);
 const searchKeyword = ref("");
+const settlementStaffNameKeyword = ref("王欣欣");
 const currentPage = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
@@ -37,55 +50,66 @@ const columns = [
  * 加载机构客户数据
  */
 const loadClientData = async () => {
-
   try {
     loading.value = true;
 
     const params: Partial<CorpSearchRequest> = {
       pageNumber: currentPage.value,
       pageSize: pageSize.value,
-      nameLike: searchKeyword.value || null
+      nameLike: searchKeyword.value || null,
+      settlementStaffNameLike: settlementStaffNameKeyword.value || null
     };
 
     const response = await searchCorps(params);
-    console.log('📥 API响应:', response)
+    console.log("📥 API响应:", response);
 
     if (response.code === 0) {
       // 映射API响应数据到表格数据
       clientList.value = response.data.content.map(item => ({
         ...item,
         // 组合地址字段
-        location: [item.province, item.city, item.area].filter(Boolean).join(' '),
+        location: [item.province, item.city, item.area]
+          .filter(Boolean)
+          .join(" "),
         // 获取嵌套的员工姓名
-        salesStaffName: item.salesStaffs && item.salesStaffs.length > 0 ? item.salesStaffs[0].staffName : '-',
-        customerStaffName: item.customerStaffs && item.customerStaffs.length > 0 ? item.customerStaffs[0].staffName : '-',
-        settlementStaffName: item.settlementStaffs && item.settlementStaffs.length > 0 ? item.settlementStaffs[0].staffName : '-'
+        salesStaffName:
+          item.salesStaffs && item.salesStaffs.length > 0
+            ? item.salesStaffs[0].staffName
+            : "-",
+        customerStaffName:
+          item.customerStaffs && item.customerStaffs.length > 0
+            ? item.customerStaffs[0].staffName
+            : "-",
+        settlementStaffName:
+          item.settlementStaffs && item.settlementStaffs.length > 0
+            ? item.settlementStaffs[0].staffName
+            : "-"
       }));
 
       total.value = response.data.totalElements;
-      console.log('✅ 数据加载成功，共', total.value, '条记录')
-      console.log('📊 处理后的数据样例:', clientList.value[0])
+      console.log("✅ 数据加载成功，共", total.value, "条记录");
+      console.log("📊 处理后的数据样例:", clientList.value[0]);
     } else {
-      console.error('❌ API返回失败:', response)
+      console.error("❌ API返回失败:", response);
       if (response.code == 401) {
-        ElMessage.error('请重新登录');
-        return
+        ElMessage.error("请重新登录");
+        return;
       }
-      ElMessage.error(response.message || '获取机构客户数据失败');
+      ElMessage.error(response.message || "获取机构客户数据失败");
     }
   } catch (error: any) {
-    console.error('💥 加载机构客户数据失败:', error);
+    console.error("💥 加载机构客户数据失败:", error);
 
     // 处理不同类型的错误
     if (error.response?.status === 401) {
-      ElMessage.error('认证失败，请重新登录');
+      ElMessage.error("认证失败，请重新登录");
       // 可以在这里添加跳转到登录页的逻辑
     } else if (error.response?.status === 403) {
-      ElMessage.error('权限不足，无法访问该数据');
-    } else if (error.code === 'NETWORK_ERROR') {
-      ElMessage.error('网络连接失败，请检查网络设置');
+      ElMessage.error("权限不足，无法访问该数据");
+    } else if (error.code === "NETWORK_ERROR") {
+      ElMessage.error("网络连接失败，请检查网络设置");
     } else {
-      ElMessage.error(error.message || '加载机构客户数据失败');
+      ElMessage.error(error.message || "加载机构客户数据失败");
     }
 
     // 清空数据
@@ -93,7 +117,7 @@ const loadClientData = async () => {
     total.value = 0;
   } finally {
     loading.value = false;
-    console.log('🏁 数据加载完成，loading状态已关闭')
+    console.log("🏁 数据加载完成，loading状态已关闭");
   }
 };
 
@@ -106,6 +130,7 @@ const handleSearch = async () => {
 // 重置搜索
 const handleReset = async () => {
   searchKeyword.value = "";
+  settlementStaffNameKeyword.value = "";
   currentPage.value = 1;
   await loadClientData();
 };
@@ -127,11 +152,11 @@ const handleDelete = async (row: CorpItem) => {
   try {
     await ElMessageBox.confirm(
       `确定要删除机构 "${row.name}" 吗？此操作不可恢复。`,
-      '确认删除',
+      "确认删除",
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
+        confirmButtonText: "确定",
+        cancelButtonText: "取消",
+        type: "warning"
       }
     );
 
@@ -146,7 +171,7 @@ const handleDelete = async (row: CorpItem) => {
     // }
   } catch (error) {
     // 用户取消删除
-    console.log('用户取消删除');
+    console.log("用户取消删除");
   }
 };
 
@@ -165,23 +190,23 @@ const handleCurrentChange = async (page: number) => {
 // 格式化状态 - 根据API返回的实际状态值调整
 const formatStatus = (status: string) => {
   const statusMap: Record<string, { text: string; type: string }> = {
-    'ACTIVE': { text: "活跃", type: "success" },
-    'INACTIVE': { text: "停用", type: "danger" },
-    'PENDING': { text: "待审核", type: "warning" },
-    'SUSPENDED': { text: "暂停", type: "info" },
+    ACTIVE: { text: "活跃", type: "success" },
+    INACTIVE: { text: "停用", type: "danger" },
+    PENDING: { text: "待审核", type: "warning" },
+    SUSPENDED: { text: "暂停", type: "info" },
     // 兼容可能的英文状态
-    'active': { text: "活跃", type: "success" },
-    'inactive': { text: "停用", type: "danger" },
-    'pending': { text: "待审核", type: "warning" }
+    active: { text: "活跃", type: "success" },
+    inactive: { text: "停用", type: "danger" },
+    pending: { text: "待审核", type: "warning" }
   };
   return statusMap[status] || { text: status || "未知", type: "info" };
 };
 
 // 格式化时间
 const formatDateTime = (dateTime: string) => {
-  if (!dateTime) return '-';
+  if (!dateTime) return "-";
   try {
-    return new Date(dateTime).toLocaleString('zh-CN');
+    return new Date(dateTime).toLocaleString("zh-CN");
   } catch {
     return dateTime;
   }
@@ -189,139 +214,159 @@ const formatDateTime = (dateTime: string) => {
 
 // 组件挂载时加载初始数据
 onMounted(() => {
-  console.log('🎯 onMounted 钩子被调用了！')
-  console.log('🎯 当前路由:', window.location.pathname)
-  console.log('🎯 即将调用 loadClientData...')
+  console.log("🎯 onMounted 钩子被调用了！");
+  console.log("🎯 当前路由:", window.location.pathname);
+  console.log("🎯 即将调用 loadClientData...");
   loadClientData();
 });
 
 // 手动测试API调用
 const testApiCall = () => {
-  console.log('🧪 手动测试API调用')
-  loadClientData()
-}
+  console.log("🧪 手动测试API调用");
+  loadClientData();
+};
 
 // 表格选中状态
-const selectedRows = ref<CorpItem[]>([])
-const tableRef = ref()
+const selectedRows = ref<CorpItem[]>([]);
+const tableRef = ref();
 
-const exportColumns = ref<string[]>(['客户简称', '销售经理', '结算经理', '合同状态', '合同时效'])
+const exportColumns = ref<string[]>([
+  "客户简称",
+  "销售经理",
+  "结算经理",
+  "合同状态",
+  "合同时效"
+]);
 
 // 所有可选的列定义
 const availableColumns = [
-  { key: 'shortName', label: '客户简称' },
-  { key: 'salesStaffName', label: '销售经理' },
-  { key: 'settlementStaffName', label: '结算经理' },
-  { key: 'hasContractDesc', label: '合同状态' },
-  { key: 'contractValidityStatusDesc', label: '合同时效' },
-  { key: 'businessUnit', label: '客户类型' },
-  { key: 'location', label: '客户地址' },
-  { key: 'corpType', label: '所属行业' },
-  { key: 'createTime', label: '新增日期' },
-  { key: 'contactName', label: '联系人' },
-  { key: 'customerStaffName', label: '客服经理' },
-  { key: 'billAmount', label: '上期账单' }
-]
+  { key: "shortName", label: "客户简称" },
+  { key: "salesStaffName", label: "销售经理" },
+  { key: "settlementStaffName", label: "结算经理" },
+  { key: "hasContractDesc", label: "合同状态" },
+  { key: "contractValidityStatusDesc", label: "合同时效" },
+  { key: "businessUnit", label: "客户类型" },
+  { key: "location", label: "客户地址" },
+  { key: "corpType", label: "所属行业" },
+  { key: "createTime", label: "新增日期" },
+  { key: "contactName", label: "联系人" },
+  { key: "customerStaffName", label: "客服经理" },
+  { key: "billAmount", label: "上期账单" }
+];
 
 // 获取全部数据并导出Excel
 const getAllDataAndExport = async () => {
   try {
-    ElMessage.info('正在获取全部数据，请稍候...')
+    ElMessage.info("正在获取全部数据，请稍候...");
 
     // 如果没有选中数据，则获取全部数据
     if (selectedRows.value.length === 0) {
       const allDataParams: Partial<CorpSearchRequest> = {
         pageNumber: 1,
         pageSize: total.value || 1000, // 使用总数量作为pageSize
-        nameLike: searchKeyword.value || null
-      }
+        nameLike: searchKeyword.value || null,
+        settlementStaffNameLike: settlementStaffNameKeyword.value || null
+      };
 
-      console.log('📡 获取全部数据，参数:', allDataParams)
-      const response = await searchCorps(allDataParams)
+      console.log("📡 获取全部数据，参数:", allDataParams);
+      const response = await searchCorps(allDataParams);
 
       if (response.code === 0 && response.data) {
         // 使用获取到的全部数据
         const allData = response.data.content.map(item => ({
           ...item,
           // 组合地址字段
-          location: [item.province, item.city, item.area].filter(Boolean).join(' '),
+          location: [item.province, item.city, item.area]
+            .filter(Boolean)
+            .join(" "),
           // 获取嵌套的员工姓名
-          salesStaffName: item.salesStaffs && item.salesStaffs.length > 0 ? item.salesStaffs[0].staffName : '-',
-          customerStaffName: item.customerStaffs && item.customerStaffs.length > 0 ? item.customerStaffs[0].staffName : '-',
-          settlementStaffName: item.settlementStaffs && item.settlementStaffs.length > 0 ? item.settlementStaffs[0].staffName : '-'
-        }))
+          salesStaffName:
+            item.salesStaffs && item.salesStaffs.length > 0
+              ? item.salesStaffs[0].staffName
+              : "-",
+          customerStaffName:
+            item.customerStaffs && item.customerStaffs.length > 0
+              ? item.customerStaffs[0].staffName
+              : "-",
+          settlementStaffName:
+            item.settlementStaffs && item.settlementStaffs.length > 0
+              ? item.settlementStaffs[0].staffName
+              : "-"
+        }));
 
-        await exportExcelData(allData)
-        ElMessage.success(`成功导出全部 ${allData.length} 条数据！`)
+        await exportExcelData(allData);
+        ElMessage.success(`成功导出全部 ${allData.length} 条数据！`);
       } else {
-        ElMessage.error('获取全部数据失败')
+        ElMessage.error("获取全部数据失败");
       }
     } else {
       // 导出选中的数据
-      await exportExcelData(selectedRows.value)
-      ElMessage.success(`成功导出选中的 ${selectedRows.value.length} 条数据！`)
+      await exportExcelData(selectedRows.value);
+      ElMessage.success(`成功导出选中的 ${selectedRows.value.length} 条数据！`);
     }
   } catch (error) {
-    console.error('导出Excel失败:', error)
-    ElMessage.error('导出Excel失败，请重试')
+    console.error("导出Excel失败:", error);
+    ElMessage.error("导出Excel失败，请重试");
   }
-}
+};
 
 // 导出Excel数据
 const exportExcelData = async (data: CorpItem[]) => {
   // 使用用户选择的列
-  const selectedExportColumns = availableColumns.filter(col => exportColumns.value.includes(col.label))
+  const selectedExportColumns = availableColumns.filter(col =>
+    exportColumns.value.includes(col.label)
+  );
 
   if (selectedExportColumns.length === 0) {
-    ElMessage.warning('请至少选择一列进行导出')
-    return
+    ElMessage.warning("请至少选择一列进行导出");
+    return;
   }
 
   // 准备导出数据
   const exportData = data.map((item, index) => {
-    const rowData: any = {  }
+    const rowData: any = {};
     // const rowData: any = { '序号': index + 1 }
 
     selectedExportColumns.forEach(col => {
-      let value = item[col.key]
-      if (value === null || value === undefined || value === '') {
-        value = ''
+      let value = item[col.key];
+      if (value === null || value === undefined || value === "") {
+        value = "";
       }
-      rowData[col.label] = value
-    })
+      rowData[col.label] = value;
+    });
 
-    return rowData
-  })
+    return rowData;
+  });
 
   // 创建工作簿
-  const ws = XLSX.utils.json_to_sheet(exportData)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, "机构客户数据")
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "机构客户数据");
 
   // 设置列宽
-  const colWidths = selectedExportColumns.map(() => ({ wch: 15 }))
-  colWidths.unshift({ wch: 8 }) // 序号列
-  ws['!cols'] = colWidths
+  const colWidths = selectedExportColumns.map(() => ({ wch: 15 }));
+  colWidths.unshift({ wch: 8 }); // 序号列
+  ws["!cols"] = colWidths;
 
   // 生成Excel文件
-  const fileName = `机构客户数据_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.xlsx`
-  XLSX.writeFile(wb, fileName)
-}
+  const fileName = `机构客户数据_${new Date().toLocaleDateString("zh-CN").replace(/\//g, "-")}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+};
 
 // 表格选择变化处理
 const handleSelectionChange = (selection: CorpItem[]) => {
-  selectedRows.value = selection
-}
+  selectedRows.value = selection;
+};
 
 // 全选所有列
 const selectAllColumns = () => {
-  exportColumns.value = availableColumns.map(col => col.label)
-}
+  exportColumns.value = availableColumns.map(col => col.label);
+};
 
 // 清空所有选择
 const clearAllColumns = () => {
-  exportColumns.value = []
-}
+  exportColumns.value = [];
+};
 </script>
 
 <template>
@@ -338,6 +383,14 @@ const clearAllColumns = () => {
                 @keyup.enter="handleSearch"
               />
             </el-form-item>
+            <el-form-item label="结算经理">
+              <el-input
+                v-model="settlementStaffNameKeyword"
+                placeholder="请输入结算经理"
+                clearable
+                @keyup.enter="handleSearch"
+              />
+            </el-form-item>
             <el-form-item>
               <el-button type="primary" @click="handleSearch">
                 <el-icon><Search /></el-icon>
@@ -348,7 +401,11 @@ const clearAllColumns = () => {
                 重置
               </el-button>
               <!-- 导出Excel按钮 -->
-              <el-button type="success" @click="getAllDataAndExport" :disabled="clientList.length === 0">
+              <el-button
+                type="success"
+                @click="getAllDataAndExport"
+                :disabled="clientList.length === 0"
+              >
                 <el-icon><Download /></el-icon>
                 导出Excel
               </el-button>
@@ -360,17 +417,32 @@ const clearAllColumns = () => {
                 collapse-tags-tooltip
                 :max-collapse-tags="10"
                 placeholder="选择导出列"
-                style="width: 540px; margin-left: 8px;"
+                style="width: 540px; margin-left: 8px"
                 :disabled="clientList.length === 0"
                 clearable
-                @clear="() => exportColumns = []"
+                @clear="() => (exportColumns = [])"
               >
                 <template #header>
-                  <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #ebeef5;">
-                    <span style="font-size: 14px; font-weight: 600; color: #303133;">选择要导出的列</span>
-                    <div style="display: flex; gap: 8px;">
-                      <el-button size="small" text @click="selectAllColumns">全选</el-button>
-                      <el-button size="small" text @click="clearAllColumns">清空</el-button>
+                  <div
+                    style="
+                      display: flex;
+                      justify-content: space-between;
+                      align-items: center;
+                      padding: 8px 12px;
+                      border-bottom: 1px solid #ebeef5;
+                    "
+                  >
+                    <span
+                      style="font-size: 14px; font-weight: 600; color: #303133"
+                      >选择要导出的列</span
+                    >
+                    <div style="display: flex; gap: 8px">
+                      <el-button size="small" text @click="selectAllColumns"
+                        >全选</el-button
+                      >
+                      <el-button size="small" text @click="clearAllColumns"
+                        >清空</el-button
+                      >
                     </div>
                   </div>
                 </template>
@@ -399,16 +471,13 @@ const clearAllColumns = () => {
             @selection-change="handleSelectionChange"
           >
             <!-- 选择列 -->
-            <el-table-column
-              type="selection"
-              width="55"
-            />
+            <el-table-column type="selection" width="55" />
             <!-- 序号列 -->
             <el-table-column
               label="序号"
               width="60"
               type="index"
-              :index="(index) => (currentPage - 1) * pageSize + index + 1"
+              :index="index => (currentPage - 1) * pageSize + index + 1"
               align="center"
             />
             <el-table-column
@@ -424,14 +493,17 @@ const clearAllColumns = () => {
                   {{ formatStatus(row.status).text }}
                 </el-tag>
               </template>
-              <template #default="{ row }" v-else-if="col.prop === 'createTime'">
+              <template
+                #default="{ row }"
+                v-else-if="col.prop === 'createTime'"
+              >
                 {{ formatDateTime(row[col.prop]) }}
               </template>
               <template #default="{ row }" v-else>
-                {{ row[col.prop] || '-' }}
+                {{ row[col.prop] || "-" }}
               </template>
             </el-table-column>
-            <!-- 
+            <!--
             <el-table-column label="操作" width="200" fixed="right">
               <template #default="{ row }">
                 <el-button
@@ -459,7 +531,7 @@ const clearAllColumns = () => {
             <el-pagination
               v-model:current-page="currentPage"
               v-model:page-size="pageSize"
-              :page-sizes="[ 20, 50, 100, 300]"
+              :page-sizes="[20, 50, 100, 300]"
               :total="total"
               layout="total, sizes, prev, pager, next, jumper"
               @size-change="handleSizeChange"
@@ -515,8 +587,6 @@ const clearAllColumns = () => {
 .el-table {
   border-radius: 4px;
 }
-
-
 
 /* 响应式样式 */
 @media (max-width: 768px) {
