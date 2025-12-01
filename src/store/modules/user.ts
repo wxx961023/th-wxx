@@ -11,6 +11,7 @@ import {
   type UserResult,
   type RefreshTokenResult,
   getLogin,
+  realLogin,
   refreshTokenApi
 } from "@/api/user"
 import { useMultiTagsStoreHook } from "./multiTags"
@@ -63,10 +64,23 @@ export const useUserStore = defineStore("pure-user", {
     SET_LOGINDAY(value: number) {
       this.loginDay = Number(value)
     },
-    /** 登入 */
+    /** 登入（Mock接口 - 保留用于开发环境） */
     async loginByUsername(data) {
       return new Promise<UserResult>((resolve, reject) => {
         getLogin(data)
+          .then(data => {
+            if (data?.success) setToken(data.data)
+            resolve(data)
+          })
+          .catch(error => {
+            reject(error)
+          })
+      })
+    },
+    /** 真实登录 - 调用特易行员工登录API */
+    async loginByReal(data: { identity: string; password: string }) {
+      return new Promise<UserResult>((resolve, reject) => {
+        realLogin(data)
           .then(data => {
             if (data?.success) setToken(data.data)
             resolve(data)

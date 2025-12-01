@@ -37,8 +37,8 @@ dataThemeChange(overallStyle.value);
 const { title } = useNav();
 
 const ruleForm = reactive({
-  username: "admin",
-  password: "admin123"
+  username: "17688731379",
+  password: "xin90879"
 });
 
 const onLogin = async (formEl: FormInstance | undefined) => {
@@ -46,9 +46,10 @@ const onLogin = async (formEl: FormInstance | undefined) => {
   await formEl.validate(valid => {
     if (valid) {
       loading.value = true;
+      // 使用真实登录接口
       useUserStoreHook()
-        .loginByUsername({
-          username: ruleForm.username,
+        .loginByReal({
+          identity: ruleForm.username,
           password: ruleForm.password
         })
         .then(res => {
@@ -64,8 +65,12 @@ const onLogin = async (formEl: FormInstance | undefined) => {
                 .finally(() => (disabled.value = false));
             });
           } else {
-            message("登录失败", { type: "error" });
+            message("登录失败，请检查账号密码", { type: "error" });
           }
+        })
+        .catch(err => {
+          console.error("登录错误:", err);
+          message(`登录失败: ${err.message || "网络错误"}`, { type: "error" });
         })
         .finally(() => (loading.value = false));
     }
