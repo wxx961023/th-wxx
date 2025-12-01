@@ -1823,7 +1823,7 @@
 
             switch (filterType) {
               case "downloadable":
-                shouldShow = status === "已查到" && debtAmount > 0;
+                shouldShow = status === "已查到" && debtAmount !== 0;
                 break;
               case "no-debt":
                 shouldShow = status === "已查到" && debtAmount === 0;
@@ -1885,12 +1885,12 @@
         const token = document.getElementById("token").value.trim();
 
         if (!token) {
-          alert("请输入Token");
+          showToast("请输入Token", "error");
           return;
         }
 
         if (isQuerying) {
-          alert("正在查询中，请稍后再试");
+          showToast("正在查询中，请稍后再试", "error");
           return;
         }
 
@@ -1922,8 +1922,9 @@
           // 检查401错误（Token过期）
           if (response.status === 401) {
             addLog("Token已过期", "error");
-            alert(
-              "Token已过期，请重新登录！\n\n请点击'一键登录'重新获取Token。"
+            showToast(
+              "Token已过期，请重新登录！请点击'一键登录'重新获取Token。",
+              "error"
             );
             clearTokenAndLogin();
             return;
@@ -2088,10 +2089,10 @@
         const resultsTitle = document.getElementById("resultsTitle");
         const totalResults = queryResults.length;
 
-        // 统计能下载的客户数量（debtAmount > 0）
+        // 统计能下载的客户数量（debtAmount !== 0）
         const downloadableCount = queryResults.filter(record => {
           const debtAmount = parseFloat(record.debtAmount) || 0;
-          return debtAmount > 0;
+          return debtAmount !== 0;
         }).length;
 
         // 统计各种状态的客户数量
@@ -2304,14 +2305,14 @@
           const newName = editInput.value.trim();
 
           if (!newName) {
-            alert("客户名称不能为空");
+            showToast("客户名称不能为空", "error");
             return;
           }
 
           if (newName !== originalName) {
             // 检查新名称是否已存在
             if (customerConfig.hasOwnProperty(newName)) {
-              alert("该客户名称已存在");
+              showToast("该客户名称已存在", "error");
               return;
             }
 
@@ -2377,7 +2378,7 @@
         const cleanedName = cleanCustomerName(newName.trim());
 
         if (customerConfig.hasOwnProperty(cleanedName)) {
-          alert("该客户名称已存在");
+          showToast("该客户名称已存在", "error");
           return;
         }
 
@@ -2683,9 +2684,11 @@
         // 添加操作按钮
         const debtAmount = parseFloat(billData.debtAmount) || 0;
         const downloadBtnClass =
-          debtAmount > 0 ? "table-btn download" : "table-btn download disabled";
+          debtAmount !== 0
+            ? "table-btn download"
+            : "table-btn download disabled";
         const downloadBtnClick =
-          debtAmount > 0
+          debtAmount !== 0
             ? `onclick="downloadBill('${
                 billData.billId
               }', '${customerName}', '${billData.billNo || ""}', '${
@@ -2693,7 +2696,7 @@
               }', '${billData.billStartDate || ""}', '${
                 billData.billEndDate || ""
               }')"`
-            : `onclick="alert('该客户待还金额为¥${debtAmount}，无需下载账单')" style="cursor: not-allowed;"`;
+            : `onclick="showToast('该客户待还金额为¥${debtAmount}，无需下载账单', 'info')" style="cursor: not-allowed;"`;
 
         row.querySelector(".action").innerHTML = `
                 <button ${downloadBtnClick} class="${downloadBtnClass}">下载</button>
@@ -5614,7 +5617,7 @@
 
       function exportCurrentConfig() {
         if (!customerConfig || Object.keys(customerConfig).length === 0) {
-          alert("没有可导出的配置数据");
+          showToast("没有可导出的配置数据", "error");
           return;
         }
 
@@ -5672,13 +5675,13 @@
         const token = document.getElementById("token").value.trim();
 
         if (!token) {
-          alert("请输入Token");
+          showToast("请输入Token", "error");
           return;
         }
 
         // 检查是否正在查询
         if (isQuerying) {
-          alert("正在查询中，请稍后再试");
+          showToast("正在查询中，请稍后再试", "error");
           return;
         }
 
@@ -5689,7 +5692,10 @@
 
           // 加载后再次检查
           if (!customerConfig || Object.keys(customerConfig).length === 0) {
-            alert("无法加载客户配置，请检查 download_config.json 文件是否存在");
+            showToast(
+              "无法加载客户配置，请检查 download_config.json 文件是否存在",
+              "error"
+            );
             return;
           }
         }
@@ -5765,8 +5771,9 @@
               const data = await response.json();
               if (data.code === 401) {
                 addLog("Token已过期，停止查询", "error");
-                alert(
-                  "Token已过期，请重新登录！\n\n查询已停止，请点击'一键登录'重新获取Token。"
+                showToast(
+                  "Token已过期，请重新登录！查询已停止，请点击'一键登录'重新获取Token。",
+                  "error"
                 );
                 clearTokenAndLogin();
                 shouldStopQuery = true;
@@ -5826,10 +5833,10 @@
           // 更新标题和保存结果
           queryResults = allResults;
 
-          // 统计能下载的客户数量（debtAmount > 0）
+          // 统计能下载的客户数量（debtAmount !== 0）
           const downloadableCount = allResults.filter(record => {
             const debtAmount = parseFloat(record.debtAmount) || 0;
-            return debtAmount > 0;
+            return debtAmount !== 0;
           }).length;
 
           if (shouldStopQuery) {
@@ -5943,10 +5950,13 @@
         const token = document.getElementById("token").value.trim();
 
         try {
-          // 检查待还金额
+          // 检查待还金额 - 只要不等于0就允许下载
           const debt = parseFloat(debtAmount) || 0;
-          if (debt <= 0) {
-            alert(`客户 ${customerName} 的待还金额为 ¥${debt}，无需下载账单`);
+          if (debt === 0) {
+            showToast(
+              `客户 ${customerName} 的待还金额为 ¥${debt}，无需下载账单`,
+              "info"
+            );
             addLog(`跳过下载: ${customerName} - 待还金额为 ¥${debt}`, "info");
             return;
           }
@@ -5972,8 +5982,9 @@
           // 检查401错误（Token过期）
           if (response.status === 401) {
             addLog("Token已过期，下载失败", "error");
-            alert(
-              "Token已过期，请重新登录！\n\n请点击'一键登录'重新获取Token后再试。"
+            showToast(
+              "Token已过期，请重新登录！请点击'一键登录'重新获取Token后再试。",
+              "error"
             );
             clearTokenAndLogin();
             return;
@@ -6021,14 +6032,14 @@
           return;
         }
 
-        // 过滤出debtAmount大于0的客户
+        // 过滤出debtAmount不等于0的客户
         const filteredResults = queryResults.filter(record => {
           const debtAmount = parseFloat(record.debtAmount) || 0;
-          return debtAmount > 0;
+          return debtAmount !== 0;
         });
 
         if (filteredResults.length === 0) {
-          showToast(`没有待还金额大于0的客户需要下载`, "error");
+          showToast(`没有待还金额不为0的客户需要下载`, "error");
           return;
         }
 
@@ -6039,7 +6050,7 @@
 
         const token = document.getElementById("token").value.trim();
         if (!token) {
-          alert("请输入Token");
+          showToast("请输入Token", "error");
           return;
         }
 
@@ -6094,8 +6105,9 @@
             // 检查401错误（Token过期）
             if (response.status === 401) {
               addLog("Token已过期，批量下载停止", "error");
-              alert(
-                "Token已过期，请重新登录！\n\n批量下载已停止，请点击'一键登录'重新获取Token后再试。"
+              showToast(
+                "Token已过期，请重新登录！批量下载已停止，请点击'一键登录'重新获取Token后再试。",
+                "error"
               );
               clearTokenAndLogin();
               isDownloading = false;
@@ -6192,7 +6204,7 @@
           return;
         }
 
-        // 过滤出差旅管家且debtAmount大于0的客户
+        // 过滤出差旅管家且debtAmount不等于0的客户
         const filteredResults = queryResults.filter(record => {
           const debtAmount = parseFloat(record.debtAmount) || 0;
           // 从customerConfig中获取系统名称
@@ -6201,11 +6213,11 @@
             customerData && customerData.system
               ? customerData.system
               : "特易行";
-          return debtAmount > 0 && systemName.includes("差旅管家");
+          return debtAmount !== 0 && systemName.includes("差旅管家");
         });
 
         if (filteredResults.length === 0) {
-          showToast(`没有差旅管家客户的待还金额大于0的账单需要下载`, "error");
+          showToast(`没有差旅管家客户的待还金额不为0的账单需要下载`, "error");
           return;
         }
 
@@ -6216,7 +6228,7 @@
 
         const token = document.getElementById("token").value.trim();
         if (!token) {
-          alert("请输入Token");
+          showToast("请输入Token", "error");
           return;
         }
 
@@ -6271,8 +6283,9 @@
             // 检查401错误（Token过期）
             if (response.status === 401) {
               addLog("Token已过期，批量下载停止", "error");
-              alert(
-                "Token已过期，请重新登录！\n\n批量下载已停止，请点击'一键登录'重新获取Token后再试。"
+              showToast(
+                "Token已过期，请重新登录！批量下载已停止，请点击'一键登录'重新获取Token后再试。",
+                "error"
               );
               clearTokenAndLogin();
               isDownloading = false;
