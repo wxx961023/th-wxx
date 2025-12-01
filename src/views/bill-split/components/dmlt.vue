@@ -1135,7 +1135,7 @@ const generateGroupedExcelFiles = async () => {
               // 替换结算款项描述
               cellValue = cellValue.replace(
                 /本公司\d{4}-\d{2}-\d{2}至\d{4}-\d{2}-\d{2}与贵公司\([^)]+\)的结算款项列示如下：/,
-                `本公司${startDate}至${endDate}与贵公司(${companyGroup.groupName})的结算款项列示如下：`
+                `本公司${startDate}至${endDate}与贵公司(${personInfo.fullName})的结算款项列示如下：`
               );
               hasChanges = true;
             }
@@ -1733,13 +1733,21 @@ const generateGroupedExcelFiles = async () => {
           if (
             cellValue &&
             typeof cellValue === "string" &&
-            ["国内机票", "国内酒店", "火车票", "国际机票", "国际酒店"].includes(
-              cellValue
-            )
+            [
+              "国内机票",
+              "国内酒店",
+              "火车票",
+              "国内火车",
+              "国际机票",
+              "国际酒店"
+            ].includes(cellValue)
           ) {
             expenseTypeColIndex = col;
-            expenseType = cellValue;
-            console.log(`在第${col}列找到费用类型: ${expenseType}`);
+            // 统一将"国内火车"映射为"火车票"
+            expenseType = cellValue === "国内火车" ? "火车票" : cellValue;
+            console.log(
+              `在第${col}列找到费用类型: ${cellValue}${cellValue === "国内火车" ? " (映射为火车票)" : ""}`
+            );
             break;
           }
         }
@@ -2484,9 +2492,9 @@ const generateGroupedExcelFiles = async () => {
           for (let col = 1; col <= 50; col++) {
             // 检查前50列
             const cell = thirteenthRow.getCell(col);
-            if (cell.value === "国内火车") {
+            if (cell.value === "国内火车" || cell.value === "火车票") {
               domesticTrainColIndex = col;
-              console.log(`在第${col}列找到"国内火车"`);
+              console.log(`在第${col}列找到"${cell.value}"`);
               break;
             }
           }
