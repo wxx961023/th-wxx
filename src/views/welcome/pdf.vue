@@ -243,6 +243,8 @@ const expenseTypeRules = [
   { keywords: ["代订机票"], type: "机票费" },
   { keywords: ["代订机票款"], type: "机票费" },
   { keywords: ["代订机票费"], type: "机票费" },
+  { keywords: ["代订国内机票"], type: "国内机票费" },
+  { keywords: ["代订国际机票"], type: "国际机票费" },
   { keywords: ["代订服务费"], type: "服务费" },
   { keywords: ["代订接车费"], type: "接车费" },
   { keywords: ["代订签证费"], type: "签证费" },
