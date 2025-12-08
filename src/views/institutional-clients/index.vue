@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, h } from "vue";
 import {
   Search,
   Refresh,
@@ -9,13 +9,15 @@ import {
   Download,
   CaretBottom
 } from "@element-plus/icons-vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage, ElMessageBox, ElForm, ElFormItem, ElInput, ElButton } from "element-plus";
 import {
   searchCorps,
   type CorpSearchRequest,
   type CorpItem
 } from "@/api/institutional-clients";
 import * as XLSX from "xlsx";
+import { addDialog, closeDialog } from "@/components/ReDialog";
+import { useUserStoreHook } from "@/store/modules/user";
 
 defineOptions({
   name: "InstitutionalClientsIndex"
@@ -92,7 +94,7 @@ const loadClientData = async () => {
     } else {
       console.error("❌ API返回失败:", response);
       if (response.code == 401) {
-        ElMessage.error("请重新登录");
+        showLoginDialog();
         return;
       }
       ElMessage.error(response.message || "获取机构客户数据失败");
@@ -102,8 +104,7 @@ const loadClientData = async () => {
 
     // 处理不同类型的错误
     if (error.response?.status === 401) {
-      ElMessage.error("认证失败，请重新登录");
-      // 可以在这里添加跳转到登录页的逻辑
+      showLoginDialog();
     } else if (error.response?.status === 403) {
       ElMessage.error("权限不足，无法访问该数据");
     } else if (error.code === "NETWORK_ERROR") {
@@ -210,6 +211,113 @@ const formatDateTime = (dateTime: string) => {
   } catch {
     return dateTime;
   }
+};
+
+// 登录弹窗相关
+const loginFormData = ref({
+  identity: "17688731379",
+  password: "xin90879"
+});
+const loginLoading = ref(false);
+
+// 显示登录弹窗
+const showLoginDialog = () => {
+  // 重置登录表单（使用默认账号密码）
+  loginFormData.value = { identity: "17688731379", password: "xin90879" };
+  loginLoading.value = false;
+
+  addDialog({
+    title: "登录已过期，请重新登录",
+    width: "400px",
+    draggable: true,
+    closeOnClickModal: false,
+    closeOnPressEscape: false,
+    showClose: false,
+    hideFooter: true,
+    contentRenderer: ({ options, index }) =>
+      h(
+        "div",
+        { style: { padding: "20px 20px 0" } },
+        [
+          h(
+            ElForm,
+            {
+              labelWidth: "70px",
+              style: { maxWidth: "100%" }
+            },
+            () => [
+              h(ElFormItem, { label: "账号" }, () =>
+                h(ElInput, {
+                  modelValue: loginFormData.value.identity,
+                  "onUpdate:modelValue": (val: string) => {
+                    loginFormData.value.identity = val;
+                  },
+                  placeholder: "请输入账号",
+                  clearable: true
+                })
+              ),
+              h(ElFormItem, { label: "密码" }, () =>
+                h(ElInput, {
+                  modelValue: loginFormData.value.password,
+                  "onUpdate:modelValue": (val: string) => {
+                    loginFormData.value.password = val;
+                  },
+                  type: "password",
+                  placeholder: "请输入密码",
+                  showPassword: true,
+                  clearable: true
+                })
+              ),
+              h(
+                ElFormItem,
+                { style: { marginBottom: "0" } },
+                () =>
+                  h(
+                    ElButton,
+                    {
+                      type: "primary",
+                      loading: loginLoading.value,
+                      style: { width: "100%" },
+                      onClick: async () => {
+                        if (
+                          !loginFormData.value.identity ||
+                          !loginFormData.value.password
+                        ) {
+                          ElMessage.warning("请输入账号和密码");
+                          return;
+                        }
+                        loginLoading.value = true;
+                        try {
+                          const res = await useUserStoreHook().loginByReal({
+                            identity: loginFormData.value.identity,
+                            password: loginFormData.value.password
+                          });
+                          if (res.success) {
+                            ElMessage.success("登录成功");
+                            closeDialog(options, index);
+                            // 重新加载数据
+                            await loadClientData();
+                          } else {
+                            ElMessage.error("登录失败，请检查账号密码");
+                          }
+                        } catch (err: any) {
+                          console.error("登录错误:", err);
+                          ElMessage.error(
+                            `登录失败: ${err.message || "网络错误"}`
+                          );
+                        } finally {
+                          loginLoading.value = false;
+                        }
+                      }
+                    },
+                    () => "登录"
+                  )
+              )
+            ]
+          )
+        ]
+      )
+  });
 };
 
 // 组件挂载时加载初始数据
