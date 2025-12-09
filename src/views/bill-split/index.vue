@@ -5,6 +5,7 @@ import DmltBillSplit from "./components/dmlt.vue";
 import SdmBillSplit from "./components/sdm.vue";
 import FzjtBillSplit from "./components/fzjt.vue";
 import GdhyqcBillSplit from "./components/gdhyqc.vue";
+import DdlxBillSplit from "./components/ddlx.vue";
 
 defineOptions({
   name: "BillSplitIndex"
@@ -52,6 +53,12 @@ const selectedComponent = ref<string>("cxjg");
                 <p>适用于广东鸿粤汽车的账单分账处理（按开票单位拆分）</p>
               </div>
             </el-radio>
+            <el-radio label="cbr">
+              <div class="component-option">
+                <h4>戴德梁行</h4>
+                <p>适用于戴德梁行的账单分账处理（按部门拆分）</p>
+              </div>
+            </el-radio>
           </el-radio-group>
         </el-card>
       </div>
@@ -63,6 +70,7 @@ const selectedComponent = ref<string>("cxjg");
         <SdmBillSplit v-else-if="selectedComponent === 'sdm'" />
         <FzjtBillSplit v-else-if="selectedComponent === 'fzjt'" />
         <GdhyqcBillSplit v-else-if="selectedComponent === 'gdhyqc'" />
+        <DdlxBillSplit v-else-if="selectedComponent === 'cbr'" />
       </div>
     </div>
   </div>
