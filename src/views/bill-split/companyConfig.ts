@@ -4,6 +4,7 @@ export interface CompanyInfo {
   contact: string
   phone: string
   otherFullName?: string
+  worksheetType?: 'all' | 'simple' // 工作表类型
 
 }
 
@@ -129,5 +130,54 @@ const personConfig: PersonConfig = {
   }
 }
 
+// 戴德梁行公司配置
+const cushmanWakefieldConfig: CompanyConfig = {
+  // 戴德梁行公司名称映射配置
+  nameMapping: {
+
+    "戴德梁行房地产顾问(深圳)有限公司": {
+      shortName: "830039戴德梁行（深圳）-顾问",
+      contact: "",
+      phone: "",
+      worksheetType: "all"
+    },
+    "深圳市戴德梁行土地房地产评估有限公司": {
+      shortName: "830039戴德梁行（深圳）-评估",
+      contact: "",
+      phone: "",
+      worksheetType: "all"
+    },
+    "戴德梁行房地产顾问(深圳)有限公司南宁分公司": {
+      shortName: "830039戴德梁行-南宁分公司",
+      contact: "",
+      phone: "",
+      worksheetType: "simple"
+    },
+    "戴德梁行房地产顾问(深圳)有限公司厦门分公司": {
+      shortName: "830039戴德梁行（顾问）-厦门分公司",
+      contact: "",
+      phone: "",
+      worksheetType: "all"
+    },
+    "深圳市戴德梁行土地房地产评估有限公司厦门分公司": {
+      shortName: "830039戴德梁行（评估）-厦门分公司",
+      contact: "",
+      phone: "",
+      worksheetType: "simple"
+    }
+  },
+
+  // 获取戴德梁行公司映射信息
+  getCompanyInfo(fullName: string): CompanyInfo {
+    return (
+      this.nameMapping[fullName] || {
+        shortName: fullName, // 如果没有配置，使用原名
+        contact: "",
+        phone: ""
+      }
+    )
+  }
+}
+
 export default companyConfig
-export { personConfig }
+export { personConfig, cushmanWakefieldConfig }

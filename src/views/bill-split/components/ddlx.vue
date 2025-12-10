@@ -136,6 +136,7 @@ import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { cushmanWakefieldConfig } from "../companyConfig";
 
 defineOptions({
   name: "DdlxBillSplit"
@@ -923,7 +924,15 @@ const generateGroupedExcelFiles = async () => {
     for (const companyGroup of groupInfo) {
       console.log(`为公司 ${companyGroup.groupName} 创建工作表`);
 
-      const worksheet = newWorkbook.addWorksheet(companyGroup.groupName, {
+      // 获取工作表名称，如果是戴德梁行公司，使用配置的shortName
+      let worksheetName = companyGroup.groupName;
+      const companyInfo = cushmanWakefieldConfig.getCompanyInfo(companyGroup.groupName);
+      if (companyInfo.shortName && companyInfo.shortName !== companyGroup.groupName) {
+        worksheetName = companyInfo.shortName;
+        console.log(`  使用配置的短名称: ${companyInfo.shortName}`);
+      }
+
+      const worksheet = newWorkbook.addWorksheet(worksheetName, {
         views: [{ showGridLines: true }]
       });
       worksheet.properties.defaultRowHeight = 40;
@@ -1607,7 +1616,7 @@ const generateGroupedExcelFiles = async () => {
         const lastMonth = currentMonth === 0 ? 12 : currentMonth;
         const lastMonthStr = lastMonth.toString().padStart(2, '0');
 
-        const titleText = `${currentYear}年${lastMonthStr}月份深圳市特航航空服务有限公司与戴德梁行房地产顾问（深圳）有限公司机票结算表(830039)`;
+        const titleText = `${currentYear}年${lastMonthStr}月份深圳市特航航空服务有限公司与${companyGroup.groupName}机票结算表(830039)`;
 
         // 在现有数据前插入一行作为标题行（第1行），将所有现有数据下移一行
         worksheet.insertRow(1, []);
