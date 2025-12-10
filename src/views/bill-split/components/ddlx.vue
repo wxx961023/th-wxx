@@ -456,10 +456,10 @@ const processAllSheetData = (sheetData: Record<string, any[]>, availableSheets: 
           }
 
           // 处理金额列的格式：在表格显示时保留两位小数，空值赋值为0
-          if (standardHeader === "票面价" || standardHeader === "燃油" || standardHeader === "机建" ||
+          if (standardHeader === "票价" || standardHeader === "燃油附加费" || standardHeader === "民航发展基金" ||
               standardHeader === "保险费" || standardHeader === "改签费" || standardHeader === "退票费" ||
-              standardHeader === "小计" || standardHeader === "保险" || standardHeader === "系统使用费" ||
-              standardHeader === "总金额" || standardHeader === "机票计税价格（票价+燃油附加费）" || standardHeader === "机票增值税" ||
+              standardHeader === "小计" || standardHeader === "保险" || standardHeader === "服务费" ||
+              standardHeader === "实收" || standardHeader === "机票计税价格（票价+燃油附加费）" || standardHeader === "机票增值税" ||
               standardHeader === "机票不含税金额" || standardHeader === "WD上填列Airfare数" || standardHeader === "代理商服务费增值税" ||
               standardHeader === "代理商不含税服务金额" || standardHeader === "机票增值税+服务费税额" || standardHeader === "Airfare+服务费不含税" ||
               standardHeader === "Checking") {
@@ -497,9 +497,9 @@ const processAllSheetData = (sheetData: Record<string, any[]>, availableSheets: 
         } else if (standardHeader === "国际/国内") {
           return "国内";
         } else if (standardHeader === "机票计税价格（票价+燃油附加费）") {
-          // 机票计税价格 = 票面价 + 燃油
-          const ticketPriceIndex = columnMapping["票面价"];
-          const fuelFeeIndex = columnMapping["燃油"];
+          // 机票计税价格 = 票价 + 燃油附加费
+          const ticketPriceIndex = columnMapping["票价"];
+          const fuelFeeIndex = columnMapping["燃油附加费"];
 
           if (ticketPriceIndex !== undefined && fuelFeeIndex !== undefined) {
             const ticketPrice = parseFloat(String(originalRow[ticketPriceIndex] || '').replace(/,/g, '')) || 0;
@@ -510,11 +510,11 @@ const processAllSheetData = (sheetData: Record<string, any[]>, availableSheets: 
           return "0.00";
         } else if (standardHeader === "机票增值税") {
           // 机票增值税 = IF(OR(E3="",I3<>"国内"),0,ROUND(L3/1.09*0.09,2)+ROUND(M3/1.09*0.09,2))
-          // E列是记账日期, I列是国际/国内, L列是票面价, M列是燃油
-          const recordDateIndex = columnMapping["记账日期"];
+          // E列是出票日期, I列是国际/国内, L列是票价, M列是燃油附加费
+          const recordDateIndex = columnMapping["出票日期"];
           const domesticIndex = columnMapping["国际/国内"];
-          const ticketPriceIndex = columnMapping["票面价"];
-          const fuelFeeIndex = columnMapping["燃油"];
+          const ticketPriceIndex = columnMapping["票价"];
+          const fuelFeeIndex = columnMapping["燃油附加费"];
 
           if (recordDateIndex !== undefined && domesticIndex !== undefined &&
               ticketPriceIndex !== undefined && fuelFeeIndex !== undefined) {
@@ -547,10 +547,10 @@ const processAllSheetData = (sheetData: Record<string, any[]>, availableSheets: 
           }
           return "0.00";
         } else if (standardHeader === "WD上填列Airfare数") {
-          // WD上填列Airfare数 = AA3+N3+O3+Q3 (机票不含税金额 + 票面价 + 燃油 + 保险费)
+          // WD上填列Airfare数 = AA3+N3+O3+Q3 (机票不含税金额 + 票价 + 燃油附加费 + 保险费)
           const noTaxAmountIndex = columnMapping["机票不含税金额"];
-          const ticketPriceIndex = columnMapping["票面价"];
-          const fuelFeeIndex = columnMapping["燃油"];
+          const ticketPriceIndex = columnMapping["票价"];
+          const fuelFeeIndex = columnMapping["燃油附加费"];
           const insuranceFeeIndex = columnMapping["保险费"];
 
           if (noTaxAmountIndex !== undefined && ticketPriceIndex !== undefined &&
@@ -611,7 +611,7 @@ const processAllSheetData = (sheetData: Record<string, any[]>, availableSheets: 
           return "0.00";
         } else if (standardHeader === "Checking") {
           // Checking = W3-Z3-AB3-AC3-AD3 (总金额 - 机票增值税 - WD上填列Airfare数 - 代理商服务费增值税 - 代理商不含税服务金额)
-          const totalAmountIndex = columnMapping["总金额"];
+          const totalAmountIndex = columnMapping["实收"];
           const ticketTaxIndex = columnMapping["机票增值税"];
           const airfareIndex = columnMapping["WD上填列Airfare数"];
           const serviceFeeTaxIndex = columnMapping["代理商服务费增值税"];
@@ -782,10 +782,10 @@ const mapColumnsToStandard = (originalHeaders: string[]) => {
 
   // 标准表头定义
   const standardHeaders = [
-    "序号", "记账日期", "承运人", "印刷序号(发票号码)", "电子客票号",
-    "乘机人", "部门", "乘机日期", "国际/国内", "航程", "航班号",
-    "票面价", "燃油", "机建", "保险费", "改签费",
-    "退票费", "小计", "保险", "系统使用费", "改签费", "退票费", "总金额", "备注", "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额", "机票增值税+服务费税额", "Airfare+服务费不含税", "Checking"
+    "序号", "出票日期", "承运人", "印刷序号(发票号码)", "电子客票号",
+    "乘机人", "部门", "乘机日期", "国际/国内", "航程", "航班",
+    "票价", "燃油附加费", "民航发展基金", "保险费", "改签费",
+    "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收", "备注", "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额", "机票增值税+服务费税额", "Airfare+服务费不含税", "Checking"
   ];
 
   // 列映射规则
@@ -814,9 +814,9 @@ const mapColumnsToStandard = (originalHeaders: string[]) => {
     if (headerText.includes("序号") || headerText.includes("no") || headerText.includes("#")) {
       columnMapping["序号"] = index;
       console.log(`  -> 映射到"序号"`);
-    } else if (headerText.includes("记账日期") || headerText.includes("出票日期")) {
-      columnMapping["记账日期"] = index;
-      console.log(`  -> 映射到"记账日期"`);
+    } else if (headerText.includes("出票日期") || headerText.includes("记账日期")) {
+      columnMapping["出票日期"] = index;
+      console.log(`  -> 映射到"出票日期"`);
     } else if (headerText.includes("承运人") || headerText.includes("航空公司")) {
       columnMapping["承运人"] = index;
       console.log(`  -> 映射到"承运人"`);
@@ -848,17 +848,17 @@ const mapColumnsToStandard = (originalHeaders: string[]) => {
       columnMapping["到达城市"] = index;
       console.log(`  -> 映射到"到达城市"，列索引: ${index}`);
     } else if (headerText.includes("航班") || headerText.includes("航班号")) {
-      columnMapping["航班号"] = index;
-      console.log(`  -> 映射到"航班号"`);
-    } else if (headerText.includes("票面价") || headerText.includes("票价")) {
-      columnMapping["票面价"] = index;
-      console.log(`  -> 映射到"票面价"`);
+      columnMapping["航班"] = index;
+      console.log(`  -> 映射到"航班"`);
+    } else if (headerText.includes("票价") || headerText.includes("票面价")) {
+      columnMapping["票价"] = index;
+      console.log(`  -> 映射到"票价"`);
     } else if (headerText.includes("燃油附加费") || headerText.includes("燃油")) {
-      columnMapping["燃油"] = index;
-      console.log(`  -> 映射到"燃油"`);
+      columnMapping["燃油附加费"] = index;
+      console.log(`  -> 映射到"燃油附加费"`);
     } else if (headerText.includes("民航发展基金") || headerText.includes("发展基金") || headerText.includes("基建费") || headerText.includes("机建")) {
-      columnMapping["机建"] = index;
-      console.log(`  -> 映射到"机建"`);
+      columnMapping["民航发展基金"] = index;
+      console.log(`  -> 映射到"民航发展基金"`);
     } else if (headerText.includes("保险费") || headerText.includes("保险")) {
       // 优先映射到"保险费"
       if (!columnMapping["保险费"]) {
@@ -874,12 +874,12 @@ const mapColumnsToStandard = (originalHeaders: string[]) => {
     } else if (headerText.includes("小计")) {
       columnMapping["小计"] = index;
       console.log(`  -> 映射到"小计"`);
-    } else if (headerText.includes("系统使用费") || headerText.includes("服务费")) {
-      columnMapping["系统使用费"] = index;
-      console.log(`  -> 映射到"系统使用费"`);
-    } else if (headerText.includes("总金额") || headerText.includes("实收") || headerText.includes("实付") || headerText.includes("合计")) {
-      columnMapping["总金额"] = index;
-      console.log(`  -> 映射到"总金额"`);
+    } else if (headerText.includes("服务费") || headerText.includes("系统使用费")) {
+      columnMapping["服务费"] = index;
+      console.log(`  -> 映射到"服务费"`);
+    } else if (headerText.includes("实收") || headerText.includes("总金额") || headerText.includes("实付") || headerText.includes("合计")) {
+      columnMapping["实收"] = index;
+      console.log(`  -> 映射到"实收"`);
     } else if (headerText.includes("备注") || headerText.includes("说明")) {
       columnMapping["备注"] = index;
       console.log(`  -> 映射到"备注"`);
@@ -929,6 +929,7 @@ const generateGroupedExcelFiles = async () => {
       worksheet.properties.defaultRowHeight = 40;
 
       let hasData = false;
+      const departmentSumRows: Map<string, number> = new Map(); // 记录每个部门的求和行行号
 
       // 处理所有原始工作表数据，合并到这个公司的工作表中
       Object.entries(allSheetData.value).forEach(([originalSheetKey, sheetData]) => {
@@ -1055,11 +1056,61 @@ const generateGroupedExcelFiles = async () => {
               const cell = worksheet.getCell(1, colIndex + 1);
               cell.value = header;
               cell.font = { bold: true };
-              cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFE6F3FF' }
-              };
+              // 特殊处理表头颜色
+              if (header === "序号") {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFB6CEA3' } // #B6CEA3 背景色
+                } as any;
+              } else if (header === "出票日期" || header === "承运人" || header === "乘机人" ||
+                        header === "乘机日期" || header === "航程" || header === "航班" ||
+                        header === "票价" || header === "民航发展基金" || header === "保险费" ||
+                        header === "改签费" || header === "小计" || header === "服务费" ||
+                        header === "保险" || header === "退票费" || header === "实收" || header === "备注") {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFC9E4B4' } // #C9E4B4 背景色
+                } as any;
+              } else if ([
+                "印刷序号(发票号码)", "电子客票号", "部门", "国际/国内", "燃油附加费",
+                "机票计税价格（票价+燃油附加费）", "机票不含税金额", "Checking"
+              ].includes(header)) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFFFFF00' } // #FFFF00 背景色
+                } as any;
+              } else if ([
+                "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额"
+              ].includes(header)) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFFDE38A' } // #FDE38A 背景色
+                } as any;
+              } else if (header === "机票增值税") {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FF00B0F0' } // #00B0F0 背景色
+                } as any;
+              } else if ([
+                "机票增值税+服务费税额", "Airfare+服务费不含税"
+              ].includes(header)) {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFF6C9A1' } // #F6C9A1 背景色
+                } as any;
+              } else {
+                cell.fill = {
+                  type: 'pattern',
+                  pattern: 'solid',
+                  fgColor: { argb: 'FFE6F3FF' }
+                };
+              }
               cell.border = {
                 top: { style: "thin" },
                 bottom: { style: "thin" },
@@ -1080,7 +1131,9 @@ const generateGroupedExcelFiles = async () => {
           // 按部门分组数据
           const departmentMappingIndex = columnMapping["部门"];
           const groupedData: Record<string, any[]> = {};
-          const departmentSumRows: Map<string, number> = new Map(); // 记录每个部门的求和行行号
+
+          // 清空部门求和行记录，为新的原始工作表做准备
+          departmentSumRows.clear();
 
           console.log(`🔍 开始部门分组，部门映射索引: ${departmentMappingIndex}`);
 
@@ -1120,6 +1173,7 @@ const generateGroupedExcelFiles = async () => {
                 if (standardHeader === "序号") {
                   globalRowIndex++;
                   cell.value = globalRowIndex.toString();
+                  // 移除数据行背景色，只保留表头背景色
                 } else if (standardHeader === "部门") {
                   // 部门信息从"乘机人部门"列获取
                   console.log(`🔍 Excel生成部门调试 - 行${rowIndex}: 部门值="${department}"`);
@@ -1153,8 +1207,8 @@ const generateGroupedExcelFiles = async () => {
                     cell.value = '';
                     console.log(`  ❌ 未找到出发城市或到达城市列映射`);
                   }
-                } else if (colIndex === 14 || colIndex === 15 || colIndex === 16 || colIndex === 17) {
-                  // O(14), P(15), Q(16), R(17)列设置为0
+                } else if (colIndex === 14 || colIndex === 15 || colIndex === 16 || colIndex === 17 || colIndex === 18) {
+                  // O(14), P(15), Q(16), R(17), S(18)列设置为0
                   cell.value = 0;
                   cell.numFmt = '#,##0.00';
                 } else {
@@ -1162,71 +1216,71 @@ const generateGroupedExcelFiles = async () => {
                   cell.value = transformRowData(row, standardHeader);
 
                   // 设置金额列的单元格格式为货币格式
-                  if (standardHeader === "票面价" || standardHeader === "燃油" || standardHeader === "机建" ||
+                  if (standardHeader === "票价" || standardHeader === "燃油附加费" || standardHeader === "民航发展基金" ||
                       standardHeader === "保险费" || standardHeader === "改签费" || standardHeader === "退票费" ||
-                      standardHeader === "小计" || standardHeader === "保险" || standardHeader === "系统使用费" ||
-                      standardHeader === "总金额" || standardHeader === "机票计税价格（票价+燃油附加费）" || standardHeader === "机票增值税" ||
+                      standardHeader === "小计" || standardHeader === "保险" || standardHeader === "服务费" ||
+                      standardHeader === "实收" || standardHeader === "机票计税价格（票价+燃油附加费）" || standardHeader === "机票增值税" ||
                       standardHeader === "机票不含税金额" || standardHeader === "WD上填列Airfare数" || standardHeader === "代理商服务费增值税" ||
                       standardHeader === "代理商不含税服务金额" || standardHeader === "机票增值税+服务费税额" || standardHeader === "Airfare+服务费不含税" ||
                       standardHeader === "Checking") {
                     // 机票计税价格使用公式：L列+M列
                     if (standardHeader === "机票计税价格（票价+燃油附加费）") {
                       cell.value = {
-                        formula: `L${actualRowIndex}+M${actualRowIndex}`,
+                        formula: `L${actualRowIndex + 1}+M${actualRowIndex + 1}`,
                         result: 0
                       };
                     } else if (standardHeader === "机票增值税") {
                       // 机票增值税公式：=IF(OR(E3="",I3<>"国内"),0,ROUND(L3/1.09*0.09,2)+ROUND(M3/1.09*0.09,2))
                       cell.value = {
-                        formula: `IF(OR(E${actualRowIndex}="",I${actualRowIndex}<>"国内"),0,ROUND(L${actualRowIndex}/1.09*0.09,2)+ROUND(M${actualRowIndex}/1.09*0.09,2))`,
+                        formula: `IF(OR(E${actualRowIndex + 1}="",I${actualRowIndex + 1}<>"国内"),0,ROUND(L${actualRowIndex + 1}/1.09*0.09,2)+ROUND(M${actualRowIndex + 1}/1.09*0.09,2))`,
                         result: 0
                       };
-                      // 设置浅蓝色背景
+                          // 设置蓝色背景
                       cell.fill = {
                         type: 'pattern',
                         pattern: 'solid',
-                        fgColor: { argb: 'FF019FD9' } // 浅蓝色背景
+                        fgColor: { argb: 'FF00B0F0' } // #00B0F0 蓝色背景
                       } as any;
                     } else if (standardHeader === "机票不含税金额") {
                       // 机票不含税金额公式：=Y3-Z3
                       cell.value = {
-                        formula: `Y${actualRowIndex}-Z${actualRowIndex}`,
+                        formula: `Y${actualRowIndex + 1}-Z${actualRowIndex + 1}`,
                         result: 0
                       };
                     } else if (standardHeader === "WD上填列Airfare数") {
                       // WD上填列Airfare数公式：=AA3+N3+O3+Q3
                       cell.value = {
-                        formula: `AA${actualRowIndex}+N${actualRowIndex}+O${actualRowIndex}+Q${actualRowIndex}`,
+                        formula: `AA${actualRowIndex + 1}+N${actualRowIndex + 1}+O${actualRowIndex + 1}+Q${actualRowIndex + 1}`,
                         result: 0
                       };
                     } else if (standardHeader === "代理商服务费增值税") {
                       // 代理商服务费增值税公式：=ROUND(T3/1.06*0.06,2)
                       cell.value = {
-                        formula: `ROUND(T${actualRowIndex}/1.06*0.06,2)`,
+                        formula: `ROUND(T${actualRowIndex + 1}/1.06*0.06,2)`,
                         result: 0
                       };
                     } else if (standardHeader === "代理商不含税服务金额") {
                       // 代理商不含税服务金额公式：=T3-AC3
                       cell.value = {
-                        formula: `T${actualRowIndex}-AC${actualRowIndex}`,
+                        formula: `T${actualRowIndex + 1}-AC${actualRowIndex + 1}`,
                         result: 0
                       };
                     } else if (standardHeader === "机票增值税+服务费税额") {
                       // 机票增值税+服务费税额公式：=Z3+AC3
                       cell.value = {
-                        formula: `Z${actualRowIndex}+AC${actualRowIndex}`,
+                        formula: `Z${actualRowIndex + 1}+AC${actualRowIndex + 1}`,
                         result: 0
                       };
                     } else if (standardHeader === "Airfare+服务费不含税") {
                       // Airfare+服务费不含税公式：=AB3+AD3
                       cell.value = {
-                        formula: `AB${actualRowIndex}+AD${actualRowIndex}`,
+                        formula: `AB${actualRowIndex + 1}+AD${actualRowIndex + 1}`,
                         result: 0
                       };
                     } else if (standardHeader === "Checking") {
                       // Checking公式：=W3-Z3-AB3-AC3-AD3
                       cell.value = {
-                        formula: `W${actualRowIndex}-Z${actualRowIndex}-AB${actualRowIndex}-AC${actualRowIndex}-AD${actualRowIndex}`,
+                        formula: `W${actualRowIndex + 1}-Z${actualRowIndex + 1}-AB${actualRowIndex + 1}-AC${actualRowIndex + 1}-AD${actualRowIndex + 1}`,
                         result: 0
                       };
                     } else {
@@ -1264,8 +1318,11 @@ const generateGroupedExcelFiles = async () => {
               const sumRowIndex = worksheet.rowCount + 1;
 
               // 计算该部门数据在Excel中的起始行和结束行
-              const departmentStartRow = sumRowIndex - departmentRows.length;
-              const departmentEndRow = sumRowIndex - 1;
+              // 注意：由于之后会插入标题行，实际数据会下移1位，所以这里+1
+              const departmentStartRow = sumRowIndex - departmentRows.length + 1;
+              const departmentEndRow = sumRowIndex - 1 + 1;
+
+              console.log(`  部门"${department}"求和行调试: sumRowIndex=${sumRowIndex}, departmentRows.length=${departmentRows.length}, departmentStartRow=${departmentStartRow}, departmentEndRow=${departmentEndRow}`);
 
               standardHeaders.forEach((standardHeader, colIndex) => {
                 const cell = worksheet.getCell(sumRowIndex, colIndex + 1);
@@ -1282,12 +1339,12 @@ const generateGroupedExcelFiles = async () => {
                 }
 
                 // 处理特定位置的列：O(14), P(15), Q(16), R(17)
-                const isSpecialColumn = colIndex === 14 || colIndex === 15 || colIndex === 16 || colIndex === 17;
+                const isSpecialColumn = colIndex === 14 || colIndex === 15 || colIndex === 16 || colIndex === 17 || colIndex === 18;
 
                 if (standardHeader === "序号") {
                   cell.value = ''; // 序号列留空，不显示"合计"
-                } else if (standardHeader === "票面价" || standardHeader === "燃油" || standardHeader === "机建" ||
-                          standardHeader === "保险" || standardHeader === "系统使用费" || standardHeader === "总金额" ||
+                } else if (standardHeader === "票价" || standardHeader === "燃油附加费" || standardHeader === "民航发展基金" ||
+                          standardHeader === "保险" || standardHeader === "服务费" || standardHeader === "实收" ||
                           standardHeader === "改签费" || standardHeader === "退票费" || standardHeader === "机票计税价格（票价+燃油附加费）" ||
                           standardHeader === "机票增值税" || standardHeader === "机票不含税金额" || standardHeader === "WD上填列Airfare数" ||
                           standardHeader === "代理商服务费增值税" || standardHeader === "代理商不含税服务金额" ||
@@ -1303,7 +1360,7 @@ const generateGroupedExcelFiles = async () => {
                   cell.font = { bold: true };
                   console.log(`  设置求和公式: ${columnLetter}${departmentStartRow}:${columnLetter}${departmentEndRow}`);
                 } else if (isSpecialColumn) {
-                  // O(14), P(15), Q(16), R(17)列设置为0
+                  // O(14), P(15), Q(16), R(17), S(18)列设置为0
                   cell.value = 0;
                   cell.numFmt = '#,##0.00';
                   cell.font = { bold: true };
@@ -1358,14 +1415,14 @@ const generateGroupedExcelFiles = async () => {
               }
 
               // 处理特定位置的列：O(14), P(15), Q(16), R(17)
-              const isSpecialColumn = colIndex === 14 || colIndex === 15 || colIndex === 16 || colIndex === 17;
+              const isSpecialColumn = colIndex === 14 || colIndex === 15 || colIndex === 16 || colIndex === 17 || colIndex === 18;
 
               if (colIndex === 1) {
-                // 记账日期列显示"总计"
+                // 出票日期列显示"总计"
                 cell.value = "";
                 cell.alignment = { horizontal: "center", vertical: "middle" };
-              } else if (standardHeader === "票面价" || standardHeader === "燃油" || standardHeader === "机建" ||
-                        standardHeader === "保险" || standardHeader === "系统使用费" || standardHeader === "总金额" ||
+              } else if (standardHeader === "票价" || standardHeader === "燃油附加费" || standardHeader === "民航发展基金" ||
+                        standardHeader === "保险" || standardHeader === "服务费" || standardHeader === "实收" ||
                         standardHeader === "改签费" || standardHeader === "退票费" || standardHeader === "机票计税价格（票价+燃油附加费）" ||
                         standardHeader === "机票增值税" || standardHeader === "机票不含税金额" || standardHeader === "WD上填列Airfare数" ||
                         standardHeader === "代理商服务费增值税" || standardHeader === "代理商不含税服务金额" ||
@@ -1376,6 +1433,8 @@ const generateGroupedExcelFiles = async () => {
                 const cellReferences = sumRowIndices.map(rowIndex => `${columnLetter}${rowIndex}`);
                 const sumFormula = cellReferences.join('+');
 
+                console.log(`  总计行公式调试: 部门求和行=${sumRowIndices.join(', ')}, 公式=${sumFormula}`);
+
                 cell.value = {
                   formula: `SUM(${sumFormula})`,
                   result: 0
@@ -1384,7 +1443,7 @@ const generateGroupedExcelFiles = async () => {
                 cell.font = { bold: true };
                 console.log(`  总计行设置公式: SUM(${sumFormula}) for ${standardHeader}`);
               } else if (isSpecialColumn) {
-                // O(14), P(15), Q(16), R(17)列设置为0
+                // O(14), P(15), Q(16), R(17), S(18)列设置为0
                 cell.value = 0;
                 cell.numFmt = '#,##0.00';
                 cell.font = { bold: true };
@@ -1428,11 +1487,11 @@ const generateGroupedExcelFiles = async () => {
         }
       } else {
         // 隐藏指定位置的列：O(14), P(15), Q(16), R(17)
-        const columnsToHide = [14, 15, 16, 17]; // 对应O, P, Q, R列
+        const columnsToHide = [14, 15, 16, 17, 18]; // 对应O, P, Q, R, S列
         columnsToHide.forEach((colIndex) => {
           const column = worksheet.getColumn(colIndex + 1);
           column.hidden = true;
-          const columnName = String.fromCharCode(65 + colIndex); // A=0, B=1, ..., O=14
+          const columnName = String.fromCharCode(65 + colIndex); // A=0, B=1, ..., O=14, S=18
           console.log(`  隐藏列: ${columnName} (第${colIndex + 1}列)`);
         });
 
@@ -1482,19 +1541,19 @@ const generateGroupedExcelFiles = async () => {
           });
 
           // 只有当列宽没有被特殊设置时才进行自动调整，使用更紧凑的宽度
-          if (column.width !== 16 && column.width !== 12 && column.width !== 20 && column.width !== 14 && column.width !== 10 && column.width !== 8 && column.width !== 6 && column.width !== 18) {
+          if (column.width !== 16 && column.width !== 12 && column.width !== 20 && column.width !== 14 && column.width !== 10 && column.width !== 8 && column.width !== 6 && column.width !== 18 && column.width !== 3.7) {
             column.width = Math.max(maxLength * 0.8, 10); // 从1.1改为0.8，从15改为10，更紧凑
           }
 
-          // 特殊处理记账日期、电子客票号、乘机日期、印刷序号列，设置更大的宽度
+          // 特殊处理出票日期、电子客票号、乘机日期、印刷序号列，设置更大的宽度
           const columnIndex = column.number - 1; // 列索引（从0开始）
-          if (columnIndex === 1 || columnIndex === 3 || columnIndex === 4 || columnIndex === 7) { // 记账日期(1)、印刷序号(3)、电子客票号(4)、乘机日期(7)
+          if (columnIndex === 1 || columnIndex === 3 || columnIndex === 4 || columnIndex === 7) { // 出票日期(1)、印刷序号(3)、电子客票号(4)、乘机日期(7)
             let minWidth = 18;
             let columnName = '';
 
             if (columnIndex === 1) {
-              columnName = '记账日期';
-              minWidth = 14; // 记账日期设置为14
+              columnName = '出票日期';
+              minWidth = 14; // 出票日期设置为14
             } else if (columnIndex === 3) {
               columnName = '印刷序号(发票号码)';
               minWidth = 20; // 印刷序号设置为20
@@ -1526,8 +1585,8 @@ const generateGroupedExcelFiles = async () => {
 
           // 特殊处理序号列，设置更小的宽度
           if (columnIndex === 0) { // 序号列（第0列，A列）
-            column.width = 6;
-            console.log(`  列 ${column.letter} (序号) 宽度设置为: 6 (最紧凑宽度)`);
+            column.width = 5; // 更精确的设置，尝试接近Excel中的4.25字符
+            console.log(`  列 ${column.letter} (序号) 宽度设置为: 3.7 (ExcelJS单位，精确调整)`);
           }
 
           // 特殊处理计算类列，设置更小的宽度
@@ -1537,6 +1596,253 @@ const generateGroupedExcelFiles = async () => {
             console.log(`  列 ${column.letter} (${columnNames[columnIndex - 26]}) 宽度设置为: 14 (紧凑宽度)`);
           }
         });
+      }
+
+      // 在工作表处理完成后添加标题行（这样不会影响列宽计算）
+      if (hasData && worksheet.rowCount > 0) {
+        // 生成标题
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth();
+        const lastMonth = currentMonth === 0 ? 12 : currentMonth;
+        const lastMonthStr = lastMonth.toString().padStart(2, '0');
+
+        const titleText = `${currentYear}年${lastMonthStr}月份深圳市特航航空服务有限公司与戴德梁行房地产顾问（深圳）有限公司机票结算表(830039)`;
+
+        // 在现有数据前插入一行作为标题行（第1行），将所有现有数据下移一行
+        worksheet.insertRow(1, []);
+
+        // 更新所有记录的行号，因为插入了一行标题行
+        console.log(`  📍 插入标题行前的部门求和行记录:`, Array.from(departmentSumRows.entries()).map(([dept, row]) => `${dept}=${row}`));
+
+        const updatedDepartmentSumRows = new Map<string, number>();
+        departmentSumRows.forEach((rowIndex, department) => {
+          updatedDepartmentSumRows.set(department, rowIndex + 1);
+          console.log(`    🔄 更新 ${department}: ${rowIndex} → ${rowIndex + 1}`);
+        });
+
+        // 更新原始Map
+        departmentSumRows.clear();
+        updatedDepartmentSumRows.forEach((rowIndex, department) => {
+          departmentSumRows.set(department, rowIndex);
+        });
+
+        console.log(`  📍 插入标题行后的部门求和行记录:`, Array.from(departmentSumRows.entries()).map(([dept, row]) => `${dept}=${row}`));
+        console.log(`  工作表 ${companyGroup.groupName}: 标题行插入后，更新了 ${departmentSumRows.size} 个部门求和行的行号`);
+
+        // 更新总计行中的公式引用
+        if (departmentSumRows.size > 0) {
+          // 找到总计行的位置（应该是最后一个有数据的行，在标题行插入后）
+          // 总计行是所有部门求和行之后的那一行
+          const maxDepartmentSumRow = Math.max(...Array.from(departmentSumRows.values()));
+          const grandTotalRowIndex = maxDepartmentSumRow + 1; // 总计行在最后一个部门求和行的下一行
+
+          console.log(`  🔍 总计行位置计算:`);
+          console.log(`    - 最后一个部门求和行位置: ${maxDepartmentSumRow}`);
+          console.log(`    - 总计行位置: ${grandTotalRowIndex}`);
+          console.log(`    - 工作表总行数: ${worksheet.rowCount}`);
+
+          // 定义需要更新公式的列索引（对应standardHeaders中的索引）
+          const formulaColumnIndices = [11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30];
+          const columnNames = ["票价", "燃油附加费", "民航发展基金", "保险费", "改签费", "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收", "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额"];
+
+          console.log(`  部门求和行记录:`, Array.from(departmentSumRows.entries()).map(([dept, row]) => `${dept}=${row}`));
+
+          formulaColumnIndices.forEach((colIndex, arrayIndex) => {
+            const cell = worksheet.getCell(grandTotalRowIndex, colIndex + 1);
+
+            // 找到对应的Excel列字母
+            let columnLetter: string;
+            if (colIndex < 26) {
+              columnLetter = String.fromCharCode(65 + colIndex);
+            } else {
+              const firstLetter = String.fromCharCode(65 + Math.floor(colIndex / 26) - 1);
+              const secondLetter = String.fromCharCode(65 + (colIndex % 26));
+              columnLetter = firstLetter + secondLetter;
+            }
+
+            // 创建新的求和公式，使用更新后的部门求和行号
+            const sumRowIndices = Array.from(departmentSumRows.values());
+            const cellReferences = sumRowIndices.map(rowIndex => `${columnLetter}${rowIndex}`);
+            const newFormula = cellReferences.join('+');
+
+            cell.value = {
+              formula: `SUM(${newFormula})`,
+              result: 0
+            };
+
+            const columnName = columnNames[arrayIndex] || `未知列${colIndex}`;
+            console.log(`    更新列 ${columnLetter} (${columnName}) 索引${colIndex} 公式: SUM(${newFormula})`);
+
+            // 特别打印票价列的详细信息
+            if (colIndex === 11) {
+              console.log(`    🎫 票价列详细信息:`);
+              console.log(`      - 总计行位置: ${grandTotalRowIndex}`);
+              console.log(`      - 部门求和行位置: [${sumRowIndices.join(', ')}]`);
+              console.log(`      - 生成公式: SUM(${newFormula})`);
+              console.log(`      - 单元格地址: ${columnLetter}${grandTotalRowIndex}`);
+
+              // 检查更新前后的公式
+              const beforeValue = cell.value;
+              console.log(`      - 更新前单元格值:`, beforeValue);
+              console.log(`      - 更新后单元格值:`, cell.value);
+            }
+          });
+        }
+
+        // 合并标题行从A列到X列（第1-24列）
+        worksheet.mergeCells(1, 1, 1, 24);
+        const titleCell = worksheet.getCell(1, 1);
+        titleCell.value = titleText;
+        titleCell.font = {
+          bold: true,
+          size: 16
+        };
+        titleCell.alignment = {
+          horizontal: "center",
+          vertical: "middle"
+        };
+
+        worksheet.getRow(1).height = 40;
+        console.log(`  工作表 ${companyGroup.groupName}: 已添加标题行，总行数: ${worksheet.rowCount}`);
+
+        // 在标题行设置完成后，添加付款提示行
+        if (departmentSumRows.size > 0) {
+          const paymentReminderRowIndex = worksheet.rowCount + 1;
+          const currentDate = new Date();
+          const currentYear = currentDate.getFullYear();
+          const currentMonth = currentDate.getMonth() + 1;
+          const paymentDate = `${currentYear}年${currentMonth.toString().padStart(2, '0')}月02日`;
+
+          const totalAmountColumnLetter = 'W';
+          const maxDepartmentSumRow = Math.max(...Array.from(departmentSumRows.values()));
+
+          // 按照标题行的方式：先合并，再设置内容和格式
+          console.log(`  📝 在标题行后添加付款提示行: 第${paymentReminderRowIndex}行，第1-24列`);
+          worksheet.mergeCells(paymentReminderRowIndex, 1, paymentReminderRowIndex, 24);
+
+          const reminderCell = worksheet.getCell(paymentReminderRowIndex, 1);
+          reminderCell.value = {
+            formula: `CONCATENATE("总计：", TEXT(${totalAmountColumnLetter}${maxDepartmentSumRow + 1}, "0"), "元。请贵公司在${paymentDate}前结款，付款后请提供银行水单或致电联系查询款项是否到账，谢谢合作！")`,
+            result: ''
+          };
+
+          reminderCell.font = { size: 12, bold: false };
+          reminderCell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+          reminderCell.border = {
+            top: { style: "thin" }, bottom: { style: "thin" },
+            left: { style: "thin" }, right: { style: "thin" }
+          };
+
+          worksheet.getRow(paymentReminderRowIndex).height = 24;
+
+          console.log(`  ✅ 付款提示行合并完成 (第${paymentReminderRowIndex}行)`);
+
+          // 添加银行账户信息行
+          const bankInfoRowIndex = worksheet.rowCount + 1;
+          const bankInfoText = "开户行：光大银行(光大银行深圳八卦岭支行),账号：38980188000607612,名称：深圳市特航航空服务有限公司";
+
+          // 按照标题行的方式：先合并，再设置内容和格式
+          console.log(`  📝 添加银行信息行: 第${bankInfoRowIndex}行，第1-24列`);
+          worksheet.mergeCells(bankInfoRowIndex, 1, bankInfoRowIndex, 24);
+
+          const bankInfoCell = worksheet.getCell(bankInfoRowIndex, 1);
+          bankInfoCell.value = bankInfoText;
+
+          // 设置银行信息行格式
+          bankInfoCell.font = {
+            size: 12,
+            bold: false,
+            color: { argb: 'FFFF0000' } // 红色
+          };
+          bankInfoCell.alignment = {
+            horizontal: "left",
+            vertical: "middle",
+            wrapText: true
+          };
+          bankInfoCell.border = {
+            top: { style: "thin" },
+            bottom: { style: "thin" },
+            left: { style: "thin" },
+            right: { style: "thin" }
+          };
+
+          // 设置银行信息行高为24磅
+          worksheet.getRow(bankInfoRowIndex).height = 24;
+
+          console.log(`  ✅ 银行信息行合并完成 (第${bankInfoRowIndex}行)`);
+
+          // 添加制表人行
+          const creatorRowIndex = worksheet.rowCount + 1;
+          const creatorText = "制表人：王欣欣";
+
+          // 按照标题行的方式：先合并，再设置内容和格式
+          console.log(`  📝 添加制表人行: 第${creatorRowIndex}行，第1-24列`);
+          worksheet.mergeCells(creatorRowIndex, 1, creatorRowIndex, 24);
+
+          const creatorCell = worksheet.getCell(creatorRowIndex, 1);
+          creatorCell.value = creatorText;
+
+          // 设置制表人行格式
+          creatorCell.font = {
+            size: 12,
+            bold: false
+          };
+          creatorCell.alignment = {
+            horizontal: "right", // 文字靠右对齐
+            vertical: "middle",
+            wrapText: true
+          };
+          creatorCell.border = {
+            top: { style: "thin" },
+            bottom: { style: "thin" },
+            left: { style: "thin" },
+            right: { style: "thin" }
+          };
+
+          // 设置制表人行高为24磅
+          worksheet.getRow(creatorRowIndex).height = 24;
+
+          console.log(`  ✅ 制表人行合并完成 (第${creatorRowIndex}行)`);
+
+          // 添加当前月份日期行
+          const dateRowIndex = worksheet.rowCount + 1;
+
+          // 获取当前月份的1号
+          const today = new Date();
+          const thisYear = today.getFullYear();
+          const thisMonth = today.getMonth() + 1;
+          const dateText = `${thisYear}/${thisMonth}/1`;
+
+          // 按照标题行的方式：先合并，再设置内容和格式
+          console.log(`  📝 添加日期行: 第${dateRowIndex}行，第1-24列，日期: ${dateText}`);
+          worksheet.mergeCells(dateRowIndex, 1, dateRowIndex, 24);
+
+          const dateCell = worksheet.getCell(dateRowIndex, 1);
+          dateCell.value = dateText;
+
+          // 设置日期行格式
+          dateCell.font = {
+            size: 12,
+            bold: false
+          };
+          dateCell.alignment = {
+            horizontal: "right", // 文字靠右对齐
+            vertical: "middle",
+            wrapText: true
+          };
+          dateCell.border = {
+            top: { style: "thin" },
+            bottom: { style: "thin" },
+            left: { style: "thin" },
+            right: { style: "thin" }
+          };
+
+          // 设置日期行高为24磅
+          worksheet.getRow(dateRowIndex).height = 24;
+
+          console.log(`  ✅ 日期行合并完成 (第${dateRowIndex}行)`);
+        }
       }
     }
 
