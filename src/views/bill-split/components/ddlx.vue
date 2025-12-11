@@ -483,8 +483,11 @@ const processAllSheetData = (sheetData: Record<string, any[]>, availableSheets: 
         companyDetails.value[companyName] = [];
       }
 
+      // 获取公司信息配置
+      const companyInfo = cushmanWakefieldConfig.getCompanyInfo(companyName);
+
       // 获取标准表头
-      const { standardHeaders, columnMapping } = mapColumnsToStandard(data[0]);
+      const { standardHeaders, columnMapping } = mapColumnsToStandard(data[0], companyInfo);
 
       // 数据转换函数：处理特殊的列转换逻辑
       const transformRowDataForDetails = (originalRow: any[], standardHeader: string, itemIndex: number) => {
@@ -866,17 +869,27 @@ const generateFileName = (groupName: string) => {
 };
 
 // 列映射函数：将原表列映射到标准表头
-const mapColumnsToStandard = (originalHeaders: string[]) => {
+const mapColumnsToStandard = (originalHeaders: string[], companyInfo: any) => {
   console.log('=== 开始列映射调试 ===');
   console.log('原始表头:', originalHeaders);
 
-  // 标准表头定义
-  const standardHeaders = [
+  // 基础表头定义
+  const baseStandardHeaders = [
     "序号", "出票日期", "承运人", "印刷序号(发票号码)", "电子客票号",
     "乘机人", "部门", "乘机日期", "国际/国内", "航程", "航班",
     "票价", "燃油附加费", "民航发展基金", "保险费", "改签费",
-    "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收", "备注", "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额", "机票增值税+服务费税额", "Airfare+服务费不含税", "Checking"
+    "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收", "备注"
   ];
+
+  // 扩展表头定义（仅在worksheetType为"all"时包含）
+  const extendedStandardHeaders = [
+    "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额", "机票增值税+服务费税额", "Airfare+服务费不含税", "Checking"
+  ];
+
+  // 根据公司配置动态组合表头
+  const standardHeaders = companyInfo.worksheetType === "all"
+    ? [...baseStandardHeaders, ...extendedStandardHeaders]
+    : baseStandardHeaders;
 
   // 列映射规则
   const columnMapping: Record<string, number> = {};
@@ -1089,8 +1102,11 @@ const generateGroupedExcelFiles = async () => {
 
           console.log(`  工作表 ${originalSheetKey}: 表头列数=${headers.length}, 数据样例列数=${companyData[0]?.length}`);
 
+          // 获取公司信息配置
+          const companyInfo = cushmanWakefieldConfig.getCompanyInfo(companyGroup.groupName);
+
           // 获取列映射
-          const { standardHeaders, columnMapping } = mapColumnsToStandard(headers);
+          const { standardHeaders, columnMapping } = mapColumnsToStandard(headers, companyInfo);
 
           // 数据转换函数：处理特殊的列转换逻辑
           const transformRowData = (originalRow: any[], standardHeader: string) => {
@@ -1552,13 +1568,22 @@ const generateGroupedExcelFiles = async () => {
 
                 if (standardHeader === "序号") {
                   cell.value = ''; // 序号列留空，不显示"合计"
-                } else if (standardHeader === "票价" || standardHeader === "燃油附加费" || standardHeader === "民航发展基金" ||
-                          standardHeader === "保险" || standardHeader === "服务费" || standardHeader === "实收" ||
-                          standardHeader === "改签费" || standardHeader === "退票费" || standardHeader === "机票计税价格（票价+燃油附加费）" ||
-                          standardHeader === "机票增值税" || standardHeader === "机票不含税金额" || standardHeader === "WD上填列Airfare数" ||
-                          standardHeader === "代理商服务费增值税" || standardHeader === "代理商不含税服务金额" ||
-                          standardHeader === "机票增值税+服务费税额" || standardHeader === "Airfare+服务费不含税" ||
-                          standardHeader === "Checking") {
+                } else if (
+                  (companyInfo.worksheetType === "all" && (
+                    standardHeader === "票价" || standardHeader === "燃油附加费" || standardHeader === "民航发展基金" ||
+                    standardHeader === "保险" || standardHeader === "服务费" || standardHeader === "实收" ||
+                    standardHeader === "改签费" || standardHeader === "退票费" || standardHeader === "机票计税价格（票价+燃油附加费）" ||
+                    standardHeader === "机票增值税" || standardHeader === "机票不含税金额" || standardHeader === "WD上填列Airfare数" ||
+                    standardHeader === "代理商服务费增值税" || standardHeader === "代理商不含税服务金额" ||
+                    standardHeader === "机票增值税+服务费税额" || standardHeader === "Airfare+服务费不含税" ||
+                    standardHeader === "Checking"
+                  )) ||
+                  (companyInfo.worksheetType !== "all" && (
+                    standardHeader === "票价" || standardHeader === "燃油附加费" || standardHeader === "民航发展基金" ||
+                    standardHeader === "保险" || standardHeader === "服务费" || standardHeader === "实收" ||
+                    standardHeader === "改签费" || standardHeader === "退票费"
+                  ))
+                ) {
                   // 设置求和公式，包括机票计税价格列
                   // 例如 =SUM(L2:L4)
                   cell.value = {
@@ -1857,9 +1882,27 @@ const generateGroupedExcelFiles = async () => {
           console.log(`    - 总计行位置: ${grandTotalRowIndex}`);
           console.log(`    - 工作表总行数: ${worksheet.rowCount}`);
 
-          // 定义需要更新公式的列索引（对应standardHeaders中的索引）
-          const formulaColumnIndices = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33];
-          const columnNames = ["票价", "燃油附加费", "民航发展基金", "保险费", "改签费", "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收", "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额", "机票增值税+服务费税额", "Airfare+服务费不含税", "Checking"];
+          // 获取公司配置信息以检查worksheetType
+          const companyInfo = cushmanWakefieldConfig.getCompanyInfo(companyGroup.groupName);
+          console.log(`  📋 公司配置信息:`, companyInfo);
+
+          // 基础列索引（始终包含的列）
+          let formulaColumnIndices = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]; // 票价到实收列
+          let columnNames = ["票价", "燃油附加费", "民航发展基金", "保险费", "改签费", "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收"];
+
+          // 只有在worksheetType为"all"时才添加Y列到AG列的公式
+          if (companyInfo.worksheetType === "all") {
+            // 添加更多列：从机票计税价格开始
+            const additionalIndices = [24, 25, 26, 27, 28, 29, 30, 31, 32, 33];
+            const additionalNames = ["机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额", "机票增值税+服务费税额", "Airfare+服务费不含税", "Checking"];
+
+            formulaColumnIndices = [...formulaColumnIndices, ...additionalIndices];
+            columnNames = [...columnNames, ...additionalNames];
+
+            console.log(`  📊 worksheetType="all"，包含完整列索引:`, formulaColumnIndices);
+          } else {
+            console.log(`  📊 worksheetType="simple"，只包含基础列索引:`, formulaColumnIndices);
+          }
 
           console.log(`  部门求和行记录:`, Array.from(departmentSumRows.entries()).map(([dept, row]) => `${dept}=${row}`));
 
