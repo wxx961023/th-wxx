@@ -22,6 +22,71 @@
       </el-upload>
     </div>
 
+    <!-- PDF上传区域 - 仅对戴德梁行显示 -->
+    <div v-if="uploadedFile" class="pdf-upload-section">
+      <el-card class="pdf-upload-card">
+        <template #header>
+          <div class="card-header">
+            <span>PDF文件上传（印刷序号提取）</span>
+          </div>
+        </template>
+
+        <el-upload
+          class="pdf-uploader"
+          accept=".pdf,.zip"
+          :http-request="noopRequest"
+          :on-change="handlePdfFileChange"
+          :show-file-list="true"
+          :multiple="true"
+          :limit="10"
+          :on-remove="handlePdfRemove"
+          :auto-upload="false"
+          drag
+        >
+          <el-icon class="el-icon--upload">
+            <upload-filled />
+          </el-icon>
+          <div class="el-upload__text">
+            将PDF文件或ZIP压缩包拖到此处，或<em>点击上传</em>
+          </div>
+          <template #tip>
+            <div class="el-upload__tip">
+              支持上传PDF文件或ZIP压缩包（ZIP包可包含多层文件夹中的PDF文件），用于提取印刷序号(发票号码)和备注信息
+            </div>
+          </template>
+        </el-upload>
+
+        <!-- PDF提取结果预览 -->
+        <div v-if="pdfData.length > 0" class="pdf-data-preview">
+          <el-divider content-position="left">
+            <span>PDF提取结果预览（{{ pdfData.length }}条记录）</span>
+          </el-divider>
+          <el-table :data="pdfData" border stripe max-height="400">
+            <el-table-column type="index" label="序号" width="60" align="center" />
+            <el-table-column prop="ticketNumber" label="电子客票号" width="150" />
+            <el-table-column prop="invoiceNumber" label="印刷序号(发票号码)" width="220" />
+            <el-table-column prop="remark" label="备注" />
+            <el-table-column prop="pageNum" label="页码" width="80" />
+            <el-table-column prop="confidence" label="置信度" width="100">
+              <template #default="{ row }">
+                <el-tag :type="row.confidence > 0.8 ? 'success' : row.confidence > 0.6 ? 'warning' : 'danger'">
+                  {{ (row.confidence * 100).toFixed(1) }}%
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- PDF处理状态 -->
+        <div v-if="pdfLoading" class="pdf-loading">
+          <el-icon class="is-loading">
+            <loading />
+          </el-icon>
+          <p>正在解析PDF文件...</p>
+        </div>
+      </el-card>
+    </div>
+
     <!-- 数据展示区域 -->
     <div v-if="showData && getGroupInfo().length > 0" class="data-section">
       <div class="data-header">
@@ -133,10 +198,14 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
-import { UploadFilled } from "@element-plus/icons-vue";
+import { UploadFilled, Loading } from "@element-plus/icons-vue";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { cushmanWakefieldConfig } from "../companyConfig";
+import * as pdfjsLib from "pdfjs-dist";
+import extractInvoiceInfo from "./extractInvoiceInfo";
+import { GlobalWorkerOptions } from "pdfjs-dist";
+import JSZip from "jszip";
 
 defineOptions({
   name: "DdlxBillSplit"
@@ -153,6 +222,12 @@ const companyDetails = ref<Record<string, any[]>>({});
 
 // 当前选中的公司
 const selectedCompany = ref<string>("");
+
+// PDF相关状态
+const uploadedPdfFiles = ref<File[]>([]);
+const pdfData = ref<any[]>([]);
+const pdfLoading = ref(false);
+const pdfProcessingCount = ref(0);
 
 const handleFileChange = (uploadFile: any) => {
   const file = uploadFile.raw;
@@ -664,18 +739,29 @@ const processAllSheetData = (sheetData: Record<string, any[]>, availableSheets: 
 
 // 获取分组信息
 const getGroupInfo = () => {
+  console.log('🔍 getGroupInfo 开始执行');
+  console.log('📊 allSheetData.value:', Object.keys(allSheetData.value));
   const companyGroups = new Map<string, any>();
 
   Object.entries(allSheetData.value).forEach(([sheetKey, sheetData]) => {
-    if (!sheetData || sheetData.length === 0) return;
+    console.log(`📋 处理工作表: ${sheetKey}, 数据长度: ${sheetData?.length}`);
+    if (!sheetData || sheetData.length === 0) {
+      console.log(`  ❌ 工作表 ${sheetKey} 无数据`);
+      return;
+    }
 
     // 查找部门列
     const headers = sheetData[0] as any[];
+    console.log(`  📝 表头数据:`, headers);
     const departmentColumnIndex = headers.findIndex(
       (cell: any) => cell && cell.toString().includes("乘机人部门")
     );
 
-    if (departmentColumnIndex === -1) return;
+    console.log(`  🎯 部门列索引: ${departmentColumnIndex}`);
+    if (departmentColumnIndex === -1) {
+      console.log(`  ❌ 工作表 ${sheetKey} 未找到"乘机人部门"列`);
+      return;
+    }
 
     // 统计该公司在此工作表中的数据
     const companyCountMap = new Map<string, number>();
@@ -737,7 +823,10 @@ const getGroupInfo = () => {
     });
   });
 
-  return Array.from(companyGroups.values());
+  const result = Array.from(companyGroups.values());
+  console.log('🎯 getGroupInfo 最终结果:', result);
+  console.log('📈 分组数量:', result.length);
+  return result;
 };
 
 // 获取分组数量
@@ -911,8 +1000,10 @@ const mapColumnsToStandard = (originalHeaders: string[]) => {
 
 // 生成分组Excel文件
 const generateGroupedExcelFiles = async () => {
+  console.log('🚀 generateGroupedExcelFiles 函数开始执行');
   generating.value = true;
   const groupInfo = getGroupInfo();
+  console.log(`📊 groupInfo 长度: ${groupInfo.length}`, groupInfo);
 
   try {
     console.log(`开始生成分组Excel文件，共 ${groupInfo.length} 个公司`);
@@ -1305,6 +1396,115 @@ const generateGroupedExcelFiles = async () => {
                   }
                 }
 
+                // PDF数据集成：使用PDF提取的数据匹配Excel中的电子客票号
+                console.log(`  🔍 列处理: "${standardHeader}"`);
+                if (standardHeader === "印刷序号(发票号码)") {
+                  console.log(`  🎯 找到印刷序列! 开始PDF匹配调试`);
+                  console.log(`    PDF数据总数: ${pdfData.value.length}`);
+                  console.log(`    PDF数据内容:`, pdfData.value);
+
+
+                  // 获取当前行的电子客票号（E列）
+                  const ticketNumberIndex = columnMapping["电子客票号"];
+                  console.log(`    电子客票号列索引: ${ticketNumberIndex}`);
+                  console.log(`    列映射:`, columnMapping);
+
+                  if (ticketNumberIndex !== undefined) {
+                    const currentTicketNumber = String(row[ticketNumberIndex] || '').trim();
+                    console.log(`    Excel电子客票号: "${currentTicketNumber}"`);
+                    console.log(`    当前行数据:`, row);
+
+                    if (currentTicketNumber && pdfData.value.length > 0) {
+                      console.log(`    ✅ 条件满足，开始匹配PDF数据...`);
+
+                      // 遍历所有PDF数据，查找匹配的记录
+                      for (let i = 0; i < pdfData.value.length; i++) {
+                        const pdfRecord = pdfData.value[i];
+                        // 预处理：去掉电子客票号中的"-"符号后再进行比较
+                        const normalizedCurrentTicketNumber = currentTicketNumber.replace(/-/g, '');
+                        const normalizedPdfTicketNumber = pdfRecord.ticketNumber ? pdfRecord.ticketNumber.replace(/-/g, '') : '';
+                        const normalizedOriginalValue = pdfRecord.originalValue ? pdfRecord.originalValue.replace(/-/g, '') : '';
+
+                        console.log(`    检查PDF记录 ${i + 1}:`, {
+                          ticketNumber: pdfRecord.ticketNumber,
+                          invoiceNumber: pdfRecord.invoiceNumber,
+                          originalValue: pdfRecord.originalValue,
+                          currentTicketNumber: currentTicketNumber,
+                          normalizedCurrentTicketNumber: normalizedCurrentTicketNumber,
+                          normalizedPdfTicketNumber: normalizedPdfTicketNumber,
+                          normalizedOriginalValue: normalizedOriginalValue
+                        });
+
+                        // 使用多种匹配方式，都基于去除"-"符号后的值
+                        const isMatch =
+                          (normalizedPdfTicketNumber && normalizedPdfTicketNumber === normalizedCurrentTicketNumber) ||
+                          (normalizedOriginalValue && normalizedOriginalValue === normalizedCurrentTicketNumber)
+
+                        console.log(`    匹配结果 ${i + 1}: ${isMatch}`);
+
+                        if (isMatch) {
+                          // 优先使用invoiceNumber，如果没有则使用originalValue
+                          cell.value = pdfRecord.invoiceNumber || pdfRecord.originalValue;
+                          console.log(`  🎉 PDF匹配成功! D列"印刷序号(发票号码)" = "${cell.value}"`);
+                          console.log(`  📄 Excel电子客票号: "${currentTicketNumber}"`);
+                          console.log(`  📄 打印匹配的PDF记录 ${i + 1}:`);
+                          console.log(`     ticketNumber: ${pdfRecord.ticketNumber}`);
+                          console.log(`     invoiceNumber: ${pdfRecord.invoiceNumber}`);
+                          console.log(`     originalValue: ${pdfRecord.originalValue}`);
+                          console.log(`     remark: ${pdfRecord.remark}`);
+                          console.log(`     pageNum: ${pdfRecord.pageNum}`);
+                          console.log(`     confidence: ${pdfRecord.confidence}`);
+                          break; // 找到第一个匹配就停止
+                        }
+                      }
+
+                      if (!cell.value || (typeof cell.value === 'string' && cell.value.startsWith("TEST_D_COLUMN_"))) {
+                        console.log(`  ❌ PDF匹配失败: 未找到匹配的记录`);
+                        console.log(`  📄 所有PDF记录详情:`);
+                        pdfData.value.forEach((record, index) => {
+                          console.log(`    记录 ${index + 1}:`, record);
+                        });
+                      }
+                    } else {
+                      console.log(`  ⚠️ PDF匹配条件不满足: currentTicketNumber="${currentTicketNumber}", pdfData.length=${pdfData.value.length}`);
+                    }
+                  } else {
+                    console.log(`  ❌ 未找到电子客票号列映射`);
+                  }
+                } else if (standardHeader === "备注" && pdfData.value.length > 0) {
+                  // 获取当前行的电子客票号（E列）
+                  const ticketNumberIndex = columnMapping["电子客票号"];
+                  if (ticketNumberIndex !== undefined) {
+                    const currentTicketNumber = String(row[ticketNumberIndex] || '').trim();
+
+                    if (currentTicketNumber) {
+                      // 预处理：去掉电子客票号中的"-"符号后再进行比较
+                      const normalizedCurrentTicketNumber = currentTicketNumber.replace(/-/g, '');
+
+                      // 查找匹配的PDF记录
+                      for (const pdfRecord of pdfData.value) {
+                        const normalizedPdfTicketNumber = pdfRecord.ticketNumber ? pdfRecord.ticketNumber.replace(/-/g, '') : '';
+                        const normalizedOriginalValue = pdfRecord.originalValue ? pdfRecord.originalValue.replace(/-/g, '') : '';
+
+                        // 使用多种匹配方式，都基于去除"-"符号后的值
+                        const isMatch =
+                          (normalizedPdfTicketNumber && normalizedPdfTicketNumber === normalizedCurrentTicketNumber) ||
+                          (normalizedOriginalValue && normalizedOriginalValue === normalizedCurrentTicketNumber) ||
+                          (normalizedPdfTicketNumber && normalizedCurrentTicketNumber.includes(normalizedPdfTicketNumber)) ||
+                          (normalizedPdfTicketNumber && normalizedPdfTicketNumber.includes(currentTicketNumber.split('-')[1] ? currentTicketNumber.split('-')[1] : ''))
+
+                        if (isMatch) {
+                          // 如果PDF数据有匹配，填写"电子行程单"
+                          cell.value = "电子行程单";
+                          console.log(`  📄 PDF备注匹配成功: 电子客票号"${currentTicketNumber}" -> 备注"${cell.value}"`);
+                          console.log(`  📄 匹配的PDF记录: ticketNumber=${pdfRecord.ticketNumber}, invoiceNumber=${pdfRecord.invoiceNumber}`);
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+
                 cell.border = {
                   top: { style: "thin" },
                   bottom: { style: "thin" },
@@ -1550,7 +1750,7 @@ const generateGroupedExcelFiles = async () => {
           });
 
           // 只有当列宽没有被特殊设置时才进行自动调整，使用更紧凑的宽度
-          if (column.width !== 16 && column.width !== 12 && column.width !== 20 && column.width !== 14 && column.width !== 10 && column.width !== 8 && column.width !== 6 && column.width !== 18 && column.width !== 3.7) {
+          if (column.width !== 16 && column.width !== 12 && column.width !== 14 && column.width !== 10 && column.width !== 8 && column.width !== 6 && column.width !== 18 && column.width !== 3.7) {
             column.width = Math.max(maxLength * 0.8, 10); // 从1.1改为0.8，从15改为10，更紧凑
           }
 
@@ -1565,7 +1765,7 @@ const generateGroupedExcelFiles = async () => {
               minWidth = 14; // 出票日期设置为14
             } else if (columnIndex === 3) {
               columnName = '印刷序号(发票号码)';
-              minWidth = 20; // 印刷序号设置为20
+              minWidth = 22; // 印刷序号设置为22
             } else if (columnIndex === 4) {
               columnName = '电子客票号';
               minWidth = 18; // 电子客票号保持18
@@ -1603,6 +1803,12 @@ const generateGroupedExcelFiles = async () => {
             column.width = 14;
             const columnNames = ['代理商服务费增值税', '代理商不含税服务金额', '机票增值税+服务费税额', 'Airfare+服务费不含税'];
             console.log(`  列 ${column.letter} (${columnNames[columnIndex - 26]}) 宽度设置为: 14 (紧凑宽度)`);
+          }
+
+          // 特殊处理备注列（X列），设置合适的宽度
+          if (columnIndex === 23) { // 备注列（第23列，X列）
+            column.width = 16; // 设置为16，适合显示"电子行程单"等内容
+            console.log(`  列 ${column.letter} (备注) 宽度设置为: 16 (适合显示电子行程单)`);
           }
         });
       }
@@ -1898,6 +2104,416 @@ const beforeUpload = (file: File) => {
 
   return true;
 };
+
+// 空请求函数，用于禁用默认上传行为
+const noopRequest = () => Promise.resolve()
+
+// ZIP文件处理函数 - 递归解压ZIP包中的PDF文件
+const processZipFile = async (zipFile: File): Promise<File[]> => {
+  console.log('开始处理ZIP文件:', zipFile.name)
+
+  try {
+    const zip = new JSZip()
+    const zipData = await zip.loadAsync(zipFile)
+    const pdfFiles: File[] = []
+
+    // 递归函数，用于遍历ZIP包中的所有文件和文件夹
+    const traverseZip = async (zipObj: any) => {
+      for (const [relativePath, file] of Object.entries(zipObj.files)) {
+        const zipEntry = file as any
+
+        // 跳过目录
+        if (zipEntry.dir) {
+          console.log(`跳过目录: ${relativePath}`)
+          continue
+        }
+
+        // 检查是否为PDF文件
+        if (relativePath.toLowerCase().endsWith('.pdf')) {
+          try {
+            console.log(`找到PDF文件: ${relativePath}`)
+            const pdfBlob = await zipEntry.async('blob')
+
+            // 创建File对象，保持原始文件名
+            const fileName = relativePath.split('/').pop() || `pdf_${Date.now()}.pdf`
+            const pdfFile = new File([pdfBlob], fileName, {
+              type: 'application/pdf'
+            })
+
+            pdfFiles.push(pdfFile)
+            console.log(`成功提取PDF文件: ${fileName}`)
+          } catch (error) {
+            console.error(`提取PDF文件失败 ${relativePath}:`, error)
+          }
+        }
+      }
+    }
+
+    await traverseZip(zipData)
+
+    console.log(`ZIP文件处理完成，共提取 ${pdfFiles.length} 个PDF文件`)
+    return pdfFiles
+
+  } catch (error) {
+    console.error('ZIP文件处理失败:', error)
+    ElMessage.error(`ZIP文件 "${zipFile.name}" 处理失败，请检查文件是否损坏`)
+    return []
+  }
+}
+
+// PDF文件变化处理函数 - 支持PDF和ZIP文件
+const handlePdfFileChange = async (file: any, fileList: any[]) => {
+  console.log('文件变化:', file.name, fileList.length)
+
+  // 验证文件
+  if (!file.raw) {
+    ElMessage.error('文件无效！')
+    return
+  }
+
+  const fileName = file.raw.name.toLowerCase()
+  const fileSize = file.raw.size / 1024 / 1024 // MB
+
+  // 检查文件大小
+  if (fileSize > 100) {
+    ElMessage.error("文件大小不能超过100MB！")
+    return
+  }
+
+  let filesToProcess: File[] = []
+
+  if (fileName.endsWith('.zip')) {
+    // 处理ZIP文件
+    console.log('检测到ZIP文件，开始解压...')
+
+    // 检查ZIP文件是否已经存在
+    const zipExists = uploadedPdfFiles.value.some(existingFile =>
+      existingFile.name === file.raw.name && existingFile.size === file.raw.size
+    )
+
+    if (zipExists) {
+      ElMessage.warning(`ZIP文件 "${file.raw.name}" 已经存在，跳过重复上传`)
+      return
+    }
+
+    try {
+      const extractedFiles = await processZipFile(file.raw)
+
+      if (extractedFiles.length === 0) {
+        ElMessage.warning(`ZIP文件 "${file.raw.name}" 中未找到PDF文件`)
+        return
+      }
+
+      filesToProcess = extractedFiles
+
+      // 添加ZIP文件到记录
+      uploadedPdfFiles.value.push(file.raw)
+
+      ElMessage.success(`ZIP文件解压成功，共找到 ${extractedFiles.length} 个PDF文件`)
+
+    } catch (error) {
+      console.error('ZIP文件处理失败:', error)
+      ElMessage.error(`处理ZIP文件 "${file.raw.name}" 失败`)
+      return
+    }
+
+  } else if (fileName.endsWith('.pdf')) {
+    // 处理单个PDF文件
+    console.log('检测到PDF文件')
+
+    // 检查PDF文件是否已经存在
+    const fileExists = uploadedPdfFiles.value.some(existingFile =>
+      existingFile.name === file.raw.name && existingFile.size === file.raw.size
+    )
+
+    if (fileExists) {
+      ElMessage.warning(`PDF文件 "${file.raw.name}" 已经存在，跳过重复上传`)
+      return
+    }
+
+    filesToProcess = [file.raw]
+
+    // 添加PDF文件到记录
+    uploadedPdfFiles.value.push(file.raw)
+
+  } else {
+    ElMessage.error('只支持上传PDF文件或ZIP压缩包！')
+    return
+  }
+
+  // 批量处理所有PDF文件
+  console.log(`开始批量处理 ${filesToProcess.length} 个PDF文件`)
+
+  try {
+    // 设置loading状态
+    pdfProcessingCount.value += filesToProcess.length
+    pdfLoading.value = true
+
+    // 并发处理PDF文件以提高效率
+    const processPromises = filesToProcess.map(async (pdfFile, index) => {
+      try {
+        console.log(`处理第 ${index + 1}/${filesToProcess.length} 个PDF文件: ${pdfFile.name}`)
+        await processPdfFile(pdfFile)
+      } catch (error) {
+        console.error(`处理PDF文件 "${pdfFile.name}" 失败:`, error)
+        // 不抛出错误，继续处理其他文件
+      }
+    })
+
+    await Promise.all(processPromises)
+
+    ElMessage.success(`批量处理完成，成功处理 ${filesToProcess.length} 个PDF文件`)
+
+  } catch (error) {
+    console.error('批量处理失败:', error)
+    ElMessage.error('批量处理PDF文件失败')
+  } finally {
+    // 重置loading状态
+    pdfProcessingCount.value -= filesToProcess.length
+    if (pdfProcessingCount.value <= 0) {
+      pdfLoading.value = false
+      pdfProcessingCount.value = 0
+    }
+  }
+}
+
+// PDF处理函数（保持向后兼容）
+const handlePdfUpload = async (file: File) => {
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    ElMessage.error('只能上传PDF文件！');
+    return false;
+  }
+
+  const isLt50M = file.size / 1024 / 1024 < 50;
+  if (!isLt50M) {
+    ElMessage.error("PDF文件大小不能超过50MB！");
+    return false;
+  }
+
+  // 检查文件是否已经存在
+  const fileExists = uploadedPdfFiles.value.some(existingFile =>
+    existingFile.name === file.name && existingFile.size === file.size
+  );
+
+  if (fileExists) {
+    ElMessage.warning(`文件 "${file.name}" 已经存在，跳过重复上传`);
+    return false;
+  }
+
+  // 添加到文件列表
+  uploadedPdfFiles.value.push(file);
+
+  // 使用await确保文件按顺序处理，避免并发问题
+  try {
+    await processPdfFile(file);
+  } catch (error) {
+    console.error(`处理文件 "${file.name}" 失败:`, error);
+    ElMessage.error(`处理文件 "${file.name}" 失败`);
+  }
+
+  return false; // 阻止自动上传
+};
+
+const handlePdfRemove = async (file: any, fileList: any[]) => {
+  // 从文件列表中移除
+  uploadedPdfFiles.value = fileList;
+
+  // 重新处理剩余的PDF文件 - 不直接清空，而是重新处理所有剩余文件
+  const remainingFiles = fileList.map(f => f.raw);
+
+  if (remainingFiles.length > 0) {
+    // 清空现有数据，然后重新处理所有剩余文件以确保数据一致性
+    pdfData.value = [];
+
+    // 重置处理计数器并设置loading状态
+    pdfProcessingCount.value = 0;
+    pdfLoading.value = true;
+
+    try {
+      // 逐个处理剩余文件
+      await Promise.all(remainingFiles.map(f => processPdfFile(f)));
+      ElMessage.success(`PDF文件已更新，移除"${file.name}"，当前总计${pdfData.value.length}条记录`);
+    } catch (error) {
+      console.error('重新处理PDF文件失败:', error);
+      ElMessage.error('重新处理PDF文件失败');
+    }
+  } else {
+    // 如果没有剩余文件，才清空数据
+    pdfData.value = [];
+    ElMessage.success('所有PDF文件已移除');
+  }
+};
+
+// 配置PDF.js worker - 使用本地worker文件路径（与pdf.vue保持一致）
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+const processPdfFile = async (file: File) => {
+  // 使用计数器来避免多个文件同时处理时loading状态混乱
+  pdfProcessingCount.value++;
+  pdfLoading.value = true;
+
+  try {
+    console.log('开始处理PDF文件:', file.name);
+
+    // 将File转换为ArrayBuffer
+    const arrayBuffer = await file.arrayBuffer();
+
+    // 加载PDF文档，添加更多配置选项
+    const loadingTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      // 尝试使用标准配置，让pdfjs自己处理worker
+    });
+
+    const pdf = await loadingTask.promise;
+    console.log(`PDF加载成功，共${pdf.numPages}页`);
+
+    const extractedData: any[] = [];
+
+    // 逐页处理PDF
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+
+      // 提取并组合文本内容
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+
+      console.log(`第${pageNum}页文本长度:`, pageText.length);
+      console.log(`=== 第${pageNum}页PDF完整文本内容 ===`);
+      console.log('原始文本:', pageText);
+
+      // 预处理文本：移除数字和字母之间的空格
+      const cleanedText = pageText
+        .replace(/(\d)\s+(?=\d)/g, '$1')  // 移除数字间的空格
+        .replace(/([A-Z])\s+(?=[A-Z])/g, '$1')  // 移除字母间的空格
+        .replace(/([A-Z])\s+(?=\d)/g, '$1')  // 移除字母数字间的空格
+        .replace(/(\d)\s+(?=[A-Z])/g, '$1'); // 移除数字字母间的空格
+
+      console.log('=== 清理后的文本 ===');
+      console.log('清理后文本:', cleanedText);
+      console.log('=== 文本内容结束 ===');
+
+      // 使用简化的提取函数
+      const pageData = extractInvoiceInfo(cleanedText, pageNum);
+      extractedData.push(...pageData);
+    }
+
+    // 去重并排序
+    console.log('🔍 PDF处理结果检查:');
+    console.log('  extractedData:', extractedData);
+    console.log('  extractedData.length:', extractedData.length);
+
+    const uniqueData = removeDuplicates(extractedData);
+    console.log('  uniqueData (去重后):', uniqueData);
+    console.log('  uniqueData.length:', uniqueData.length);
+
+    // 线程安全地合并新数据到现有数据
+    // 使用响应式API确保数据更新的原子性
+    const currentData = [...pdfData.value];
+    const mergedData = removeDuplicates([...currentData, ...uniqueData]);
+
+    // 原子性更新pdfData，避免并发问题
+    pdfData.value = mergedData;
+    console.log('✅ pdfData.value 已更新:', pdfData.value);
+    console.log('✅ pdfData.value.length:', pdfData.value.length);
+
+    console.log(`PDF处理完成，新增${uniqueData.length}条记录，总计${mergedData.length}条发票信息`);
+    ElMessage.success(`PDF处理完成，文件"${file.name}"新增${uniqueData.length}条记录，总计${mergedData.length}条发票信息`);
+
+  } catch (error: any) {
+    console.error('PDF处理失败:', error);
+
+    // 提供更具体的错误信息
+    let errorMessage = 'PDF文件处理失败';
+    if (error.message && error.message.includes('worker')) {
+      errorMessage = 'PDF.js worker配置失败，请刷新页面重试';
+    } else if (error.message && error.message.includes('Invalid PDF')) {
+      errorMessage = '无效的PDF文件，请检查文件是否损坏';
+    } else if (error.message && error.message.includes('password')) {
+      errorMessage = 'PDF文件受密码保护，无法处理';
+    } else if (error.message && error.message.includes('size')) {
+      errorMessage = 'PDF文件过大，请选择较小的文件';
+    }
+
+    ElMessage.error(errorMessage);
+  } finally {
+    // 减少处理计数器
+    pdfProcessingCount.value--;
+
+    // 只有当所有文件都处理完成时才关闭loading
+    if (pdfProcessingCount.value <= 0) {
+      pdfLoading.value = false;
+      pdfProcessingCount.value = 0; // 重置为0，避免负数
+    }
+  }
+};
+
+const calculateConfidence = (invoiceNumber: string, text: string): number => {
+  if (!invoiceNumber) return 0;
+
+  let confidence = 0.5; // 基础置信度
+
+  // 长度合理性 (8-12位最佳)
+  if (invoiceNumber.length >= 8 && invoiceNumber.length <= 12) {
+    confidence += 0.2;
+  }
+
+  // 包含数字和字母的组合
+  if (/\d/.test(invoiceNumber) && /[A-Za-z]/.test(invoiceNumber)) {
+    confidence += 0.1;
+  }
+
+  // 纯数字且长度合理
+  if (/^\d+$/.test(invoiceNumber) && invoiceNumber.length >= 8) {
+    confidence += 0.15;
+  }
+
+  // 在文本中的位置和上下文
+  const textLower = text.toLowerCase();
+  const invoiceIndex = textLower.indexOf(invoiceNumber.toLowerCase());
+
+  // 检查是否在关键词附近
+  const keywords = ['印刷序号', '发票号码', '票据号', '票号', 'invoice'];
+  const contextWindow = 50; // 上下文字符窗口
+
+  for (const keyword of keywords) {
+    const keywordIndex = textLower.indexOf(keyword);
+    if (keywordIndex !== -1 && Math.abs(keywordIndex - invoiceIndex) <= contextWindow) {
+      confidence += 0.2;
+      break;
+    }
+  }
+
+  return Math.min(confidence, 1.0); // 最大置信度为1.0
+};
+
+const removeDuplicates = (data: any[]) => {
+  console.log('🔍 removeDuplicates 输入数据:', data);
+  console.log('🔍 removeDuplicates 输入数据长度:', data.length);
+
+  // 简化去重逻辑：基于ticketNumber+invoiceNumber组合去重
+  const seen = new Set<string>();
+  const uniqueData = data.filter(item => {
+    const key = `${item.ticketNumber || ''}-${item.invoiceNumber || ''}`;
+    console.log(`  检查项目: ticketNumber="${item.ticketNumber}", invoiceNumber="${item.invoiceNumber}"`);
+    if (seen.has(key)) {
+      console.log(`    ❌ 重复，跳过`);
+      return false;
+    }
+    seen.add(key);
+    console.log(`    ✅ 保留`);
+    return true;
+  });
+
+  console.log('🔍 removeDuplicates 过滤后数据:', uniqueData);
+  console.log('🔍 removeDuplicates 过滤后长度:', uniqueData.length);
+
+  // 按页码排序
+  const sortedData = uniqueData.sort((a, b) => a.pageNum - b.pageNum);
+  console.log('🔍 removeDuplicates 最终结果:', sortedData);
+  return sortedData;
+};
 </script>
 
 <style scoped>
@@ -1960,5 +2576,72 @@ const beforeUpload = (file: File) => {
   background: #f8f9fa;
   border-radius: 8px;
   border: 1px solid #e9ecef;
+}
+
+/* PDF上传区域样式 */
+.pdf-upload-section {
+  margin: 20px 0;
+}
+
+.pdf-upload-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.pdf-uploader {
+  width: 100%;
+}
+
+.pdf-uploader .el-upload-dragger {
+  width: 100%;
+  height: 120px;
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  background: #fafafa;
+  transition: all 0.3s ease;
+}
+
+.pdf-uploader .el-upload-dragger:hover {
+  border-color: #409eff;
+  background: #f0f9ff;
+}
+
+.pdf-data-preview {
+  margin-top: 20px;
+  max-height: 400px;
+  overflow: auto;
+}
+
+.more-data-hint {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #f0f9ff;
+  border-left: 4px solid #409eff;
+  color: #666;
+  font-size: 14px;
+}
+
+.pdf-loading {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.pdf-loading .el-icon {
+  font-size: 24px;
+  color: #409eff;
+}
+
+.pdf-loading p {
+  margin-top: 10px;
+  color: #666;
+  font-size: 14px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: #303133;
 }
 </style>
