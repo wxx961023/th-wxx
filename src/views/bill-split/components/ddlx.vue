@@ -1807,8 +1807,8 @@ const generateGroupedExcelFiles = async () => {
 
           // 特殊处理备注列（X列），设置合适的宽度
           if (columnIndex === 23) { // 备注列（第23列，X列）
-            column.width = 16; // 设置为16，适合显示"电子行程单"等内容
-            console.log(`  列 ${column.letter} (备注) 宽度设置为: 16 (适合显示电子行程单)`);
+            column.width = 12; // 设置为16，适合显示"电子行程单"等内容
+            console.log(`  列 ${column.letter} (备注) 宽度设置为: 14 (适合显示电子行程单)`);
           }
         });
       }
@@ -1858,8 +1858,8 @@ const generateGroupedExcelFiles = async () => {
           console.log(`    - 工作表总行数: ${worksheet.rowCount}`);
 
           // 定义需要更新公式的列索引（对应standardHeaders中的索引）
-          const formulaColumnIndices = [11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30];
-          const columnNames = ["票价", "燃油附加费", "民航发展基金", "保险费", "改签费", "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收", "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额"];
+          const formulaColumnIndices = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33];
+          const columnNames = ["票价", "燃油附加费", "民航发展基金", "保险费", "改签费", "退票费", "小计", "保险", "服务费", "改签费", "退票费", "实收", "机票计税价格（票价+燃油附加费）", "机票增值税", "机票不含税金额", "WD上填列Airfare数", "代理商服务费增值税", "代理商不含税服务金额", "机票增值税+服务费税额", "Airfare+服务费不含税", "Checking"];
 
           console.log(`  部门求和行记录:`, Array.from(departmentSumRows.entries()).map(([dept, row]) => `${dept}=${row}`));
 
