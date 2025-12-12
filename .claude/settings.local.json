@@ -7,7 +7,8 @@
       "Bash(ping:*)",
       "Bash(git push:*)",
       "Bash(nslookup:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(npx vue-tsc:*)"
     ],
     "deny": [],
     "ask": []

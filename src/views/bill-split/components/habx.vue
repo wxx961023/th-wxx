@@ -57,9 +57,9 @@
 
         <el-alert
           v-if="generatedFiles.length > 0"
-          title="国内机票拆分结果"
+          title="账单拆分结果"
           type="info"
-          :description="`已按部门拆分为 ${generatedFiles.length} 个文件，共处理机票数据 ${getTotalFlightRows()} 条`"
+          :description="`已按部门拆分为 ${generatedFiles.length} 个文件，共处理数据 ${getTotalFlightRows()} 条`"
           show-icon
           style="margin-top: 10px"
         />
@@ -82,15 +82,15 @@
 
       <!-- 部门拆分结果表格 -->
       <div v-if="generatedFiles.length > 0" class="department-results">
-        <h4>国内机票部门拆分结果</h4>
+        <h4>账单部门拆分结果</h4>
         <el-table :data="generatedFiles" border style="width: 100%">
           <el-table-column prop="departmentName" label="部门名称" width="200" />
           <el-table-column prop="rowCount" label="数据行数" width="120" />
           <el-table-column prop="fileName" label="生成文件名" />
-          <el-table-column label="文件预览" width="120">
+          <el-table-column label="类型" width="120">
             <template #default="scope">
-              <el-tag type="info" size="small">
-                {{ scope.row.fileName.split('.').pop().toUpperCase() }}
+              <el-tag :type="scope.row.departmentName.includes('火车') ? 'warning' : 'success'" size="small">
+                {{ scope.row.departmentName.includes('火车') ? '火车票' : '机票' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -174,17 +174,19 @@ const readFile = (file: File) => {
           // 处理通用产品数据
           processUniversalProducts(workbook);
 
-          // 异步处理国内和国际机票数据
-          const processAllFlightData = async () => {
+          // 异步处理机票和火车票数据
+          const processAllData = async () => {
             // 处理国内和国际机票按部门拆分
             const domesticResult = processDomesticFlights(workbook);
             const internationalResult = processInternationalFlights(workbook);
+            const trainResult = processDomesticTrains(workbook);
 
-            // 合并两个工作表的数据
-            const mergedDepartmentData: { [key: string]: Array<{data: any[], isInternational: boolean}> } = {};
+            // 合并机票和火车票的数据
+            const mergedDepartmentData: { [key: string]: Array<{data: any[], type: string}> } = {};
             const allDepartments = new Set([
               ...Object.keys(domesticResult.departmentData),
-              ...Object.keys(internationalResult.departmentData)
+              ...Object.keys(internationalResult.departmentData),
+              ...Object.keys(trainResult.departmentData)
             ]);
 
             allDepartments.forEach(department => {
@@ -195,7 +197,7 @@ const readFile = (file: File) => {
                 domesticResult.departmentData[department].forEach(row => {
                   mergedDepartmentData[department].push({
                     data: row,
-                    isInternational: false
+                    type: 'domestic-flight'
                   });
                 });
               }
@@ -205,7 +207,17 @@ const readFile = (file: File) => {
                 internationalResult.departmentData[department].forEach(row => {
                   mergedDepartmentData[department].push({
                     data: row,
-                    isInternational: true
+                    type: 'international-flight'
+                  });
+                });
+              }
+
+              // 添加火车票数据
+              if (trainResult.departmentData[department]) {
+                trainResult.departmentData[department].forEach(row => {
+                  mergedDepartmentData[department].push({
+                    data: row,
+                    type: 'train'
                   });
                 });
               }
@@ -214,21 +226,37 @@ const readFile = (file: File) => {
             // 生成合并后的部门报告
             const columnMappings = {
               domestic: domesticResult.columnMapping,
-              international: internationalResult.columnMapping
+              international: internationalResult.columnMapping,
+              train: trainResult.columnMapping
             };
 
+            // 分别处理火车票和机票数据
             const departments = Object.keys(mergedDepartmentData);
             for (const dept of departments) {
-              if (mergedDepartmentData[dept].length > 0) {
-                await generateDepartmentReport(dept, mergedDepartmentData[dept], columnMappings);
+              const deptData = mergedDepartmentData[dept];
+              if (deptData.length > 0) {
+                // 分离火车票和机票数据
+                const trainData = deptData.filter(item => item.type === 'train');
+                const flightData = deptData.filter(item => item.type === 'domestic-flight' || item.type === 'international-flight');
+
+                // 生成火车票报告
+                if (trainData.length > 0) {
+                  const trainRows = trainData.map(item => item.data);
+                  await generateTrainDepartmentReport(dept, trainRows, columnMappings.train);
+                }
+
+                // 生成机票报告
+                if (flightData.length > 0) {
+                  await generateFlightDepartmentReport(dept, flightData, columnMappings);
+                }
               }
             }
 
-            const totalProcessedRows = domesticResult.processedRows + internationalResult.processedRows;
-            ElMessage.success(`机票处理完成！共处理 ${totalProcessedRows} 行数据（国内 ${domesticResult.processedRows} 行，国际 ${internationalResult.processedRows} 行），分成 ${departments.length} 个部门`);
+            const totalProcessedRows = domesticResult.processedRows + internationalResult.processedRows + trainResult.processedRows;
+            ElMessage.success(`处理完成！共处理 ${totalProcessedRows} 行数据（国内机票 ${domesticResult.processedRows} 行，国际机票 ${internationalResult.processedRows} 行，国内火车 ${trainResult.processedRows} 行），分成 ${departments.length} 个部门`);
           };
 
-          await processAllFlightData();
+          await processAllData();
 
           showData.value = true;
           loading.value = false;
@@ -757,13 +785,344 @@ const processDomesticFlights = (workbook: any) => {
   return { departmentData, columnMapping, processedRows };
 };
 
-// 生成部门报告
-const generateDepartmentReport = async (departmentName: string, allData: Array<{data: any[], isInternational: boolean}>, columnMappings: { domestic: any, international: any }) => {
-  // 使用完整的部门名称（商务-机票-部门名称）
+// 处理国内火车票按部门拆分
+const processDomesticTrains = (workbook: any) => {
+  console.log('=== 开始处理国内火车票按部门拆分 ===');
+
+  // 尝试多种可能的火车票工作表名称
+  const possibleSheetNames = ['国内火车票'];
+  let trainSheet = null;
+  let foundSheetName = '';
+
+  for (const sheetName of possibleSheetNames) {
+    trainSheet = workbook.getWorksheet(sheetName);
+    if (trainSheet) {
+      foundSheetName = sheetName;
+      break;
+    }
+  }
+
+  if (!trainSheet) {
+    console.log('未找到火车票工作表，尝试的名称:', possibleSheetNames);
+    console.log('当前所有工作表:', workbook.worksheets.map(ws => ws.name));
+    ElMessage.warning('未找到火车票工作表，支持的工作表名称：国内火车、火车票、火车、国内火车票');
+    return { departmentData: {}, columnMapping: {}, processedRows: 0 };
+  }
+
+  console.log(`找到火车票工作表: "${foundSheetName}"`);
+
+  // 读取国内火车票数据（包含空单元格）
+  const trainData: any[][] = [];
+  trainSheet.eachRow((row: any, rowNumber: number) => {
+    const rowData: any[] = [];
+    row.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
+      rowData.push(cell.value);
+    });
+    trainData.push(rowData);
+  });
+
+  console.log(`国内火车票数据行数: ${trainData.length}`);
+
+  if (trainData.length < 2) {
+    console.log('国内火车票数据行数不足，跳过处理');
+    return { departmentData: {}, columnMapping: {}, processedRows: 0 };
+  }
+
+  // 获取表头
+  const headers = trainData[0];
+  console.log('国内火车票表头:', headers);
+
+  // 查找"费用归属"列的索引
+  const costBelongIndex = headers.findIndex((h: any) =>
+    h && h.toString().includes('费用归属')
+  );
+
+  if (costBelongIndex === -1) {
+    console.error('未找到国内火车票"费用归属"列');
+    ElMessage.warning('国内火车票工作表格式不正确，缺少"费用归属"列');
+    return { departmentData: {}, columnMapping: {}, processedRows: 0 };
+  }
+
+  console.log(`国内火车票费用归属列索引: ${costBelongIndex}`);
+
+  // 查找所有需要映射的列（新表头 -> 原表头映射）
+  const columnMapping: { [key: string]: number } = {
+    '记账日期': headers.findIndex((h: any) => h && h.toString().includes('记账日期')),
+    '订单状态': headers.findIndex((h: any) => h && h.toString().includes('订单状态')),
+    '预订人': headers.findIndex((h: any) => h && h.toString().includes('预订人')),
+    '乘车人': headers.findIndex((h: any) => h && h.toString().includes('乘车人')),
+    '费用归属': costBelongIndex,
+    '出发站': headers.findIndex((h: any) => h && h.toString().includes('出发站')),
+    '到达站': headers.findIndex((h: any) => h && h.toString().includes('到达站')),
+    '车次': headers.findIndex((h: any) => h && h.toString().includes('车次')),
+    '出发日期': headers.findIndex((h: any) => h && h.toString().includes('出发日期')),
+    '出发时间': headers.findIndex((h: any) => h && h.toString().includes('出发时间')),
+    '坐席类型': headers.findIndex((h: any) => h && h.toString().includes('坐席类型')),
+    '座位号': headers.findIndex((h: any) => h && h.toString().includes('座位号')),
+    '车票费': headers.findIndex((h: any) => h && h.toString().includes('车票费')),
+    '改签费': headers.findIndex((h: any) => h && h.toString().includes('改签费')),
+    '退票费': headers.findIndex((h: any) => h && h.toString().includes('退票费')),
+    '系统使用费': headers.findIndex((h: any) => h && h.toString().includes('系统使用费')),
+    '总金额': headers.findIndex((h: any) => h && h.toString().includes('总金额'))
+  };
+
+  console.log('国内火车票列映射:', columnMapping);
+
+  // 按部门分组数据
+  const departmentData: { [key: string]: any[][] } = {};
+  let processedRows = 0;
+
+  // 从第二行开始处理数据（跳过表头）
+  for (let i = 1; i < trainData.length; i++) {
+    const row = trainData[i];
+    const costBelong = row[costBelongIndex]?.toString().trim();
+
+    if (!costBelong) {
+      console.log(`国内火车票第 ${i + 1} 行费用归属为空，跳过`);
+      continue;
+    }
+
+    // 提取部门名称，兼容多种格式
+    let departmentName = costBelong;
+    console.log(`原始费用归属: "${costBelong}"`);
+
+    // 尝试多种格式的部门名称提取
+    if (costBelong.startsWith('商务-火车-')) {
+      departmentName = costBelong.replace('商务-火车-', '');
+    } else if (costBelong.includes('-火车-')) {
+      // 处理其他格式，如"其他-火车-部门名"
+      const parts = costBelong.split('-火车-');
+      if (parts.length === 2) {
+        departmentName = parts[1];
+      }
+    } else if (costBelong.startsWith('商务-机票-')) {
+      // 如果是机票格式，提取部门名
+      departmentName = costBelong.replace('商务-机票-', '');
+    } else if (costBelong.includes('-机票-')) {
+      const parts = costBelong.split('-机票-');
+      if (parts.length === 2) {
+        departmentName = parts[1];
+      }
+    } else {
+      // 如果都没有匹配到，直接使用原值
+      departmentName = costBelong;
+    }
+
+    console.log(`提取的部门名称: "${departmentName}"`);
+
+    console.log(`国内火车票第 ${i + 1} 行: 费用归属="${costBelong}" -> 部门="${departmentName}"`);
+
+    // 如果部门不存在，创建新的数组
+    if (!departmentData[departmentName]) {
+      departmentData[departmentName] = [];
+    }
+
+    // 将数据行添加到对应部门
+    departmentData[departmentName].push(row);
+    processedRows++;
+  }
+
+  console.log('国内火车票部门分组结果:', departmentData);
+  console.log(`处理了国内火车票 ${processedRows} 行数据，分成了 ${Object.keys(departmentData).length} 个部门`);
+
+  if (processedRows === 0) {
+    console.warn('警告：没有处理到任何国内火车票数据');
+    ElMessage.warning('未找到有效的国内火车票数据，请检查工作表名称和数据格式');
+  }
+
+  return { departmentData, columnMapping, processedRows };
+};
+
+// 生成火车票部门报告
+const generateTrainDepartmentReport = async (departmentName: string, trainData: any[], columnMapping: any) => {
+  const fullDepartmentName = `商务-火车-${departmentName}`;
+
+  try {
+    console.log(`=== 生成 ${fullDepartmentName} 火车票部门报告 ===`);
+
+    // 创建新的工作簿
+    const newWorkbook = new ExcelJS.Workbook();
+    const worksheet = newWorkbook.addWorksheet(fullDepartmentName);
+
+    // 计算上个月日期
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const year = lastMonth.getFullYear();
+    const month = lastMonth.getMonth() + 1;
+    const monthStr = month.toString().padStart(2, '0');
+
+    // 第一行：标题
+    const titleRow = worksheet.addRow([`华安保险${year}年${month}月火车对账单`]);
+    titleRow.font = { bold: true, size: 16 };
+    titleRow.alignment = { horizontal: 'center' };
+    worksheet.mergeCells(1, 1, 1, 17);
+
+    // 第二行：部门信息
+    const deptRow = worksheet.addRow([`部门：${departmentName}`]);
+    deptRow.font = { bold: true };
+    worksheet.mergeCells(2, 1, 2, 17);
+
+    // 第三行：火车票表头
+    const trainHeaders = [
+      '预订/退款日期', '订单状态', '预订人', '旅客姓名', '旅客直属部门', '行程', '车次', '出发时间',
+      '坐席', '座位编号', '车票单价', '改签费', '退票费', '销售总价', '企业支付', '服务费', '应还款总金额'
+    ];
+    const headerRow = worksheet.addRow(trainHeaders);
+    headerRow.font = { bold: true };
+
+    // 处理火车票数据
+    const processedTrainData = trainData.map((originalRow) => {
+      // 合并出发站和到达站形成行程
+      const departureStation = originalRow[columnMapping['出发站']] || '';
+      const arrivalStation = originalRow[columnMapping['到达站']] || '';
+      const itinerary = `${departureStation || ''}${arrivalStation ? '-' + arrivalStation : ''}`;
+
+      // 合并出发日期和时间
+      const departureDate = originalRow[columnMapping['出发日期']] || '';
+      const departureTime = originalRow[columnMapping['出发时间']] || '';
+      const fullDepartureTime = processDepartureTime(departureDate, departureTime);
+
+      return {
+        processedRow: [
+          originalRow[columnMapping['记账日期']] || '', // 预订/退款日期 -> 记账日期
+          originalRow[columnMapping['订单状态']] || '', // 订单状态
+          originalRow[columnMapping['预订人']] || '', // 预订人
+          originalRow[columnMapping['乘车人']] || '', // 旅客姓名 -> 乘车人
+          originalRow[columnMapping['费用归属']] || '', // 旅客直属部门 -> 费用归属
+          itinerary, // 行程 -> 出发站+到达站
+          originalRow[columnMapping['车次']] || '', // 车次
+          fullDepartureTime, // 出发时间 -> 出发日期+出发时间
+          originalRow[columnMapping['坐席类型']] || '', // 坐席 -> 坐席类型
+          originalRow[columnMapping['座位号']] || '', // 座位编号 -> 座位号
+          originalRow[columnMapping['车票费']] || 0, // 车票单价 -> 车票费
+          originalRow[columnMapping['改签费']] || 0, // 改签费
+          originalRow[columnMapping['退票费']] || 0, // 退票费
+          undefined, // 销售总价 - 留空
+          undefined, // 企业支付 - 留空
+          originalRow[columnMapping['系统使用费']] || 0, // 服务费 -> 系统使用费
+          originalRow[columnMapping['总金额']] || 0, // 应还款总金额 -> 总金额
+        ],
+        passengerName: originalRow[columnMapping['乘车人']] || '',
+        departureTime: fullDepartureTime,
+        originalRow: originalRow
+      };
+    });
+
+    // 按旅客姓名分组和排序
+    const passengerNames = Array.from(new Set(processedTrainData.map(item => item.passengerName || '未知乘客')));
+    passengerNames.sort((a, b) => a.localeCompare(b, 'zh-CN'));
+
+    const groupedByPassenger: { [key: string]: typeof processedTrainData } = {};
+    passengerNames.forEach(passengerName => {
+      const passengerData = processedTrainData.filter(item =>
+        (item.passengerName || '未知乘客') === passengerName
+      );
+      groupedByPassenger[passengerName] = passengerData;
+    });
+
+    // 对每个分组按出发时间排序
+    Object.keys(groupedByPassenger).forEach(passengerName => {
+      groupedByPassenger[passengerName].sort((a, b) => {
+        const timeA = new Date(a.departureTime || '').getTime();
+        const timeB = new Date(b.departureTime || '').getTime();
+        return timeA - timeB;
+      });
+    });
+
+    // 添加数据行和小计
+    let currentRowNumber = 4; // 数据从第4行开始
+    Object.keys(groupedByPassenger).forEach(passengerName => {
+      const passengerData = groupedByPassenger[passengerName];
+
+      // 添加该乘客的所有数据行
+      passengerData.forEach(item => {
+        const newRow = worksheet.addRow(item.processedRow);
+
+        // 火车票的销售总价和企业支付留空，不设置公式
+        currentRowNumber++;
+      });
+
+      // 添加小计行
+      if (passengerData.length > 0) {
+        const startRow = currentRowNumber - passengerData.length;
+        const endRow = currentRowNumber - 1;
+
+        const subtotalRow = worksheet.addRow([
+          '', '', '', '', // 预订/退款日期、订单状态、预订人、旅客姓名留空
+          '小计', // 旅客直属部门列显示"小计"
+          '', '', '', '', // 行程、车次、出发时间、坐席留空
+          '', '', '', '', '', '', // 座位编号、车票单价、改签费、退票费、销售总价、企业支付留空
+          '', // 服务费留空
+          { // 应还款总金额（第17列）设置求和公式
+            formula: `=SUM(Q${startRow}:Q${endRow})`,
+            result: 0
+          }
+        ]);
+
+        // 设置小计行样式
+        subtotalRow.font = { bold: true };
+        subtotalRow.getCell(5).alignment = { horizontal: 'right' }; // 小计文字右对齐
+        subtotalRow.getCell(17).numFmt = '#,##0.00'; // 设置应还款总金额的数字格式
+
+        currentRowNumber++;
+      }
+    });
+
+    // 添加总计行
+    const totalStartRow = 4; // 数据开始行
+    const totalEndRow = currentRowNumber - 1; // 最后一行数据（包括小计行）
+
+    const totalRow = worksheet.addRow([
+      '', '', '', '', // 预订/退款日期、订单状态、预订人、旅客姓名留空
+      '', // 旅客直属部门留空
+      '', '', '', '', // 行程、车次、出发时间、坐席留空
+      '', '', '', '', '', '', // 座位编号、车票单价、改签费、退票费、销售总价、企业支付留空
+      '', // 服务费留空
+      { // 应还款总金额（第17列）对小计行求和
+        formula: `=SUMIF(E${totalStartRow}:E${totalEndRow},"小计",Q${totalStartRow}:Q${totalEndRow})`,
+        result: 0
+      }
+    ]);
+
+    // 设置总计行样式
+    totalRow.font = { bold: true };
+    totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
+    totalRow.getCell(17).numFmt = '#,##0.00'; // 应还款总金额数字格式
+
+    // 设置列宽
+    for (let i = 1; i <= 17; i++) {
+      worksheet.getColumn(i).width = 15;
+    }
+
+    // 设置金额列的数字格式
+    worksheet.getColumn(11).numFmt = '#,##0.00'; // 车票单价
+    worksheet.getColumn(12).numFmt = '#,##0.00'; // 改签费
+    worksheet.getColumn(13).numFmt = '#,##0.00'; // 退票费
+    worksheet.getColumn(16).numFmt = '#,##0.00'; // 服务费
+    worksheet.getColumn(17).numFmt = '#,##0.00'; // 应还款总金额
+
+    // 生成文件
+    const fileName = `${fullDepartmentName}.xlsx`;
+    generatedFiles.value.push({
+      fileName,
+      departmentName: fullDepartmentName,
+      rowCount: trainData.length,
+      workbook: newWorkbook
+    });
+
+    console.log(`已准备生成火车票文件: ${fileName}, 包含 ${trainData.length} 条数据`);
+
+  } catch (error) {
+    console.error(`生成 ${fullDepartmentName} 火车票部门报告失败:`, error);
+  }
+};
+
+// 生成机票部门报告
+const generateFlightDepartmentReport = async (departmentName: string, flightData: Array<{data: any[], type: string}>, columnMappings: { domestic: any, international: any }) => {
   const fullDepartmentName = `商务-机票-${departmentName}`;
 
   try {
-    console.log(`=== 生成 ${fullDepartmentName} 部门报告 ===`);
+    console.log(`=== 生成 ${fullDepartmentName} 机票部门报告 ===`);
 
     // 创建新的工作簿
     const newWorkbook = new ExcelJS.Workbook();
@@ -796,8 +1155,9 @@ const generateDepartmentReport = async (departmentName: string, allData: Array<{
     const headerRow = worksheet.addRow(headers);
     headerRow.font = { bold: true };
 
-    // 首先处理所有数据，添加处理后的字段
-    const processedAllData = allData.map(({ data: originalRow, isInternational }) => {
+    // 处理机票数据
+    const processedAllData = flightData.map(({ data: originalRow, type }) => {
+      const isInternational = type === 'international-flight';
       const columnMapping = isInternational ? columnMappings.international : columnMappings.domestic;
 
       let processedItinerary = '';
@@ -1035,7 +1395,7 @@ const generateDepartmentReport = async (departmentName: string, allData: Array<{
     worksheet.getColumn(19).numFmt = '#,##0.00'; // 应还款总金额
 
     // 计算总数据量
-    const totalRows = allData.reduce((sum, { data }) => sum + data.length, 0);
+    const totalRows = flightData.reduce((sum, { data }) => sum + data.length, 0);
 
     // 生成文件
     const fileName = `${fullDepartmentName}.xlsx`;
@@ -1046,10 +1406,10 @@ const generateDepartmentReport = async (departmentName: string, allData: Array<{
       workbook: newWorkbook
     });
 
-    console.log(`已准备生成文件: ${fileName}, 包含 ${totalRows} 条数据`);
+    console.log(`已准备生成机票文件: ${fileName}, 包含 ${totalRows} 条数据`);
 
   } catch (error) {
-    console.error(`生成 ${fullDepartmentName} 部门报告失败:`, error);
+    console.error(`生成 ${fullDepartmentName} 机票部门报告失败:`, error);
   }
 };
 
