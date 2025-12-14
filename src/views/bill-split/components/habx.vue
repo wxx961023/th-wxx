@@ -39,46 +39,17 @@
       </div>
 
       <div class="data-summary">
+
         <el-alert
+          v-if="showData && getTotalRows() > 0"
           title="数据概览"
           type="info"
           :description="`已读取 ${allSheetData.length} 个工作表,共 ${getTotalRows()} 行数据`"
           show-icon
-        />
-
-        <el-alert
-          v-if="matchedRows.length > 0"
-          title="通用产品处理结果"
-          type="success"
-          :description="`已匹配 ${matchedRows.length} 条通用产品记录，金额已合并`"
-          show-icon
-          style="margin-top: 10px"
-        />
-
-        <el-alert
-          v-if="generatedFiles.length > 0"
-          title="账单拆分结果"
-          type="info"
-          :description="`已按部门拆分为 ${generatedFiles.length} 个文件，共处理数据 ${getTotalFlightRows()} 条`"
-          show-icon
           style="margin-top: 10px"
         />
       </div>
 
-      <div class="data-table">
-        <el-table :data="allSheetData" border style="width: 100%">
-          <el-table-column prop="name" label="工作表名称" width="200" />
-          <el-table-column prop="rowCount" label="数据行数" width="120" />
-          <el-table-column prop="columnCount" label="列数" width="120" />
-          <el-table-column label="预览">
-            <template #default="scope">
-              <el-button size="small" @click="previewSheet(scope.row)">
-                查看数据
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
 
       <!-- 部门拆分结果表格 -->
       <div v-if="generatedFiles.length > 0" class="department-results">
@@ -89,8 +60,13 @@
           <el-table-column prop="fileName" label="生成文件名" />
           <el-table-column label="类型" width="120">
             <template #default="scope">
-              <el-tag :type="scope.row.departmentName.includes('火车') ? 'warning' : 'success'" size="small">
-                {{ scope.row.departmentName.includes('火车') ? '火车票' : '机票' }}
+              <el-tag
+                :type="scope.row.departmentName.includes('火车') ? 'warning' :
+                       scope.row.departmentName.includes('酒店') ? 'danger' : 'success'"
+                size="small"
+              >
+                {{ scope.row.departmentName.includes('火车') ? '火车票' :
+                   scope.row.departmentName.includes('酒店') ? '酒店' : '机票' }}
               </el-tag>
             </template>
           </el-table-column>
@@ -118,8 +94,6 @@ const loading = ref(false);
 const showData = ref(false);
 const generating = ref(false);
 const originalWorkbook = ref<any>(null);
-const processedWorkbook = ref<any>(null);
-const matchedRows = ref<any[]>([]); // 记录匹配的行
 const generatedFiles = ref<any[]>([]); // 记录生成的文件
 
 const handleFileChange = (uploadFile: any) => {
@@ -171,22 +145,21 @@ const readFile = (file: File) => {
           allSheetData.value = sheetInfoArray;
           originalWorkbook.value = workbook;
 
-          // 处理通用产品数据
-          processUniversalProducts(workbook);
-
           // 异步处理机票和火车票数据
           const processAllData = async () => {
             // 处理国内和国际机票按部门拆分
             const domesticResult = processDomesticFlights(workbook);
             const internationalResult = processInternationalFlights(workbook);
             const trainResult = processDomesticTrains(workbook);
+            const hotelResult = processDomesticHotels(workbook);
 
-            // 合并机票和火车票的数据
+            // 合并机票、火车票和酒店的数据
             const mergedDepartmentData: { [key: string]: Array<{data: any[], type: string}> } = {};
             const allDepartments = new Set([
               ...Object.keys(domesticResult.departmentData),
               ...Object.keys(internationalResult.departmentData),
-              ...Object.keys(trainResult.departmentData)
+              ...Object.keys(trainResult.departmentData),
+              ...Object.keys(hotelResult.departmentData)
             ]);
 
             allDepartments.forEach(department => {
@@ -221,23 +194,35 @@ const readFile = (file: File) => {
                   });
                 });
               }
+
+              // 添加酒店数据
+              if (hotelResult.departmentData[department]) {
+                hotelResult.departmentData[department].forEach(row => {
+                  mergedDepartmentData[department].push({
+                    data: row,
+                    type: 'hotel'
+                  });
+                });
+              }
             });
 
             // 生成合并后的部门报告
             const columnMappings = {
               domestic: domesticResult.columnMapping,
               international: internationalResult.columnMapping,
-              train: trainResult.columnMapping
+              train: trainResult.columnMapping,
+              hotel: hotelResult.columnMapping
             };
 
-            // 分别处理火车票和机票数据
+            // 分别处理火车票、机票和酒店数据
             const departments = Object.keys(mergedDepartmentData);
             for (const dept of departments) {
               const deptData = mergedDepartmentData[dept];
               if (deptData.length > 0) {
-                // 分离火车票和机票数据
+                // 分离火车票、机票和酒店数据
                 const trainData = deptData.filter(item => item.type === 'train');
                 const flightData = deptData.filter(item => item.type === 'domestic-flight' || item.type === 'international-flight');
+                const hotelData = deptData.filter(item => item.type === 'hotel');
 
                 // 生成火车票报告
                 if (trainData.length > 0) {
@@ -249,11 +234,26 @@ const readFile = (file: File) => {
                 if (flightData.length > 0) {
                   await generateFlightDepartmentReport(dept, flightData, columnMappings);
                 }
+
+                // 生成酒店报告
+                if (hotelData.length > 0) {
+                  const hotelRows = hotelData.map(item => item.data);
+                  // 重新获取酒店表头用于退订费用查找
+                  const hotelSheet = workbook.getWorksheet('国内酒店') || workbook.getWorksheet('酒店') || workbook.getWorksheet('酒店票') || workbook.getWorksheet('国内酒店票');
+                  let hotelHeaders = [];
+                  if (hotelSheet) {
+                    const headerRow = hotelSheet.getRow(1);
+                    headerRow.eachCell({ includeEmpty: true }, (cell: any) => {
+                      hotelHeaders.push(cell.value);
+                    });
+                  }
+                  await generateHotelDepartmentReport(dept, hotelRows, columnMappings.hotel, hotelHeaders);
+                }
               }
             }
 
-            const totalProcessedRows = domesticResult.processedRows + internationalResult.processedRows + trainResult.processedRows;
-            ElMessage.success(`处理完成！共处理 ${totalProcessedRows} 行数据（国内机票 ${domesticResult.processedRows} 行，国际机票 ${internationalResult.processedRows} 行，国内火车 ${trainResult.processedRows} 行），分成 ${departments.length} 个部门`);
+            const totalProcessedRows = domesticResult.processedRows + internationalResult.processedRows + trainResult.processedRows + hotelResult.processedRows;
+            ElMessage.success(`处理完成！共处理 ${totalProcessedRows} 行数据（国内机票 ${domesticResult.processedRows} 行，国际机票 ${internationalResult.processedRows} 行，国内火车 ${trainResult.processedRows} 行，国内酒店 ${hotelResult.processedRows} 行），分成 ${departments.length} 个部门`);
           };
 
           await processAllData();
@@ -302,10 +302,6 @@ const beforeUpload = (file: File) => {
 
 const getTotalRows = () => {
   return allSheetData.value.reduce((sum, sheet) => sum + sheet.rowCount, 0);
-};
-
-const getTotalFlightRows = () => {
-  return generatedFiles.value.reduce((sum, file) => sum + file.rowCount, 0);
 };
 
 const previewSheet = (sheetInfo: any) => {
@@ -365,8 +361,8 @@ const convertEnglishNameToChinese = (englishName: string): string => {
 
   const nameMap: { [key: string]: string } = {
     'ZHAO/QUAN': '赵权',
-    'XIANGONG/LIU': '刘现功',
-    'RONGGUANG/LI': '李荣光'
+    'LIU/XIANGONG': '刘现功',
+    'LI/RONGGUANG': '李荣光'
   };
 
   const upperName = englishName.toString().trim().toUpperCase();
@@ -374,191 +370,6 @@ const convertEnglishNameToChinese = (englishName: string): string => {
 };
 
 
-// 处理通用产品数据
-const processUniversalProducts = (workbook: any) => {
-  console.log('=== 开始处理通用产品数据 ===');
-
-  // 获取通用产品工作表
-  const universalSheet = workbook.getWorksheet('通用产品');
-  if (!universalSheet) {
-    console.log('未找到"通用产品"工作表');
-    return;
-  }
-
-  console.log('找到"通用产品"工作表');
-
-  // 读取通用产品数据（包含空单元格）
-  const universalData: any[][] = [];
-  universalSheet.eachRow((row: any, rowNumber: number) => {
-    const rowData: any[] = [];
-    // 使用 includeEmpty 参数确保包含所有单元格（包括空的）
-    row.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
-      rowData.push(cell.value);
-    });
-    universalData.push(rowData);
-  });
-
-  console.log(`通用产品数据行数: ${universalData.length}`);
-
-  // 假设第一行是表头
-  const headers = universalData[0];
-  console.log('通用产品表头:', headers);
-
-  // 查找列索引
-  const productTypeIndex = headers.findIndex((h: any) =>
-    h && h.toString().includes('产品类型')
-  );
-  const remarkIndex = headers.findIndex((h: any) =>
-    h && h.toString().includes('产品备注')
-  );
-  const totalAmountIndex = headers.findIndex((h: any) =>
-    h && h.toString().includes('总金额')
-  );
-
-  console.log(`列索引 - 产品类型: ${productTypeIndex}, 产品备注: ${remarkIndex}, 总金额: ${totalAmountIndex}`);
-
-  if (productTypeIndex === -1 || remarkIndex === -1 || totalAmountIndex === -1) {
-    console.error('未找到必要的列: 产品类型、产品备注或总金额');
-    ElMessage.warning('通用产品工作表格式不正确，缺少必要的列');
-    return;
-  }
-
-  // 处理每一行数据（从第二行开始，跳过表头）
-  let processedCount = 0;
-  let matchedCount = 0;
-
-  for (let i = 1; i < universalData.length; i++) {
-    const row = universalData[i];
-    const productType = row[productTypeIndex]?.toString().trim();
-    const remark = row[remarkIndex]?.toString().trim();
-    const totalAmount = parseFloat(row[totalAmountIndex]) || 0;
-
-    if (!productType || !remark) {
-      continue;
-    }
-
-    console.log(`\n处理第 ${i + 1} 行: 产品类型="${productType}", 备注="${remark}", 总金额=${totalAmount}`);
-
-    // 提取订单号（前9位数字）
-    const orderNumberMatch = remark.match(/^(\d{9})/);
-    if (!orderNumberMatch) {
-      console.log(`  无法提取订单号（需要9位数字开头）`);
-      continue;
-    }
-
-    const orderNumber = orderNumberMatch[1];
-    console.log(`  提取到订单号: ${orderNumber}`);
-
-    // 根据产品类型找到对应的工作表
-    const targetSheet = workbook.getWorksheet(productType);
-    if (!targetSheet) {
-      console.log(`  未找到工作表: ${productType}`);
-      continue;
-    }
-
-    console.log(`  找到目标工作表: ${productType}`);
-
-    // 在目标工作表中查找订单号列并匹配（包含空单元格）
-    const targetData: any[][] = [];
-    targetSheet.eachRow((row: any, rowNumber: number) => {
-      const rowData: any[] = [];
-      // 使用 includeEmpty 参数确保包含所有单元格（包括空的）
-      row.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
-        rowData.push(cell.value);
-      });
-      targetData.push(rowData);
-    });
-
-    // 查找订单号列
-    const targetHeaders = targetData[0];
-    console.log(`  目标工作表表头:`, targetHeaders);
-
-    const orderNumberColIndex = targetHeaders.findIndex((h: any) =>
-      h && h.toString().includes('订单号')
-    );
-    const targetTotalAmountIndex = targetHeaders.findIndex((h: any) =>
-      h && h.toString().includes('总金额')
-    );
-
-    console.log(`  目标工作表列索引 - 订单号: ${orderNumberColIndex}, 总金额: ${targetTotalAmountIndex}`);
-
-    if (orderNumberColIndex === -1 || targetTotalAmountIndex === -1) {
-      console.log(`  目标工作表缺少必要的列`);
-      continue;
-    }
-
-    // 查找匹配的行
-    let found = false;
-    console.log(`  开始在 ${targetData.length - 1} 行数据中查找订单号: ${orderNumber}`);
-
-    for (let j = 1; j < targetData.length; j++) {
-      const targetRow = targetData[j];
-      const targetOrderNumberRaw = targetRow[orderNumberColIndex];
-      const targetOrderNumber = targetOrderNumberRaw?.toString().trim();
-
-      // 调试：打印前5行的订单号进行对比
-      if (j <= 5) {
-        console.log(`    行 ${j + 1}: 订单号="${targetOrderNumber}" (原始值: ${targetOrderNumberRaw}, 类型: ${typeof targetOrderNumberRaw})`);
-      }
-
-      if (targetOrderNumber === orderNumber) {
-        console.log(`  ✅ 找到匹配行: 第 ${j + 1} 行, 订单号: ${targetOrderNumber}`);
-
-        const originalAmount = parseFloat(targetRow[targetTotalAmountIndex]) || 0;
-        const newAmount = originalAmount + totalAmount;
-
-        console.log(`    原金额: ${originalAmount}, 通用产品金额: ${totalAmount}, 新金额: ${newAmount}`);
-
-        // 更新金额 - 使用公式形式显示
-        const excelRowNumber = j + 1;
-        const excelColNumber = targetTotalAmountIndex + 1;
-        const targetCell = targetSheet.getRow(excelRowNumber).getCell(excelColNumber);
-
-        // 设置为公式：如果通用产品金额为正数用加法，为负数用减法
-        let formula: string;
-        if (totalAmount >= 0) {
-          formula = `=${originalAmount}+${totalAmount}`;
-        } else {
-          // 负数转为正数显示为减法
-          formula = `=${originalAmount}${totalAmount}`; // totalAmount本身带负号
-        }
-        console.log(`    更新单元格: 行${excelRowNumber}, 列${excelColNumber}, 公式: ${formula}`);
-        targetCell.value = { formula: formula };
-
-        matchedCount++;
-        matchedRows.value.push({
-          universalRow: i + 1,
-          targetSheet: productType,
-          targetRow: excelRowNumber,
-          orderNumber,
-          originalAmount,
-          addedAmount: totalAmount,
-          newAmount
-        });
-
-        found = true;
-        break; // 找到匹配后跳出循环
-      }
-    }
-
-    if (!found) {
-      console.log(`  ❌ 未找到匹配的订单号: "${orderNumber}"`);
-      console.log(`  提示: 请检查目标工作表中是否存在该订单号，注意检查数据格式和空格`);
-    }
-
-    processedCount++;
-  }
-
-  // 所有数据处理完成
-  console.log(`\n=== 处理完成 ===`);
-  console.log(`处理行数: ${processedCount}`);
-  console.log(`匹配成功: ${matchedCount}`);
-  console.log(`匹配详情:`, matchedRows.value);
-
-  processedWorkbook.value = workbook;
-
-  ElMessage.success(`数据处理完成！匹配 ${matchedCount} 条记录`);
-};
 
 // 处理国际机票数据
 const processInternationalFlights = (workbook: any) => {
@@ -933,6 +744,150 @@ const processDomesticTrains = (workbook: any) => {
   return { departmentData, columnMapping, processedRows };
 };
 
+// 处理国内酒店按部门拆分
+const processDomesticHotels = (workbook: any) => {
+  console.log('=== 开始处理国内酒店按部门拆分 ===');
+
+  // 尝试多种可能的酒店工作表名称
+  const possibleSheetNames = ['国内酒店', '酒店', '酒店票', '国内酒店票'];
+  let hotelSheet = null;
+  let foundSheetName = '';
+
+  for (const sheetName of possibleSheetNames) {
+    hotelSheet = workbook.getWorksheet(sheetName);
+    if (hotelSheet) {
+      foundSheetName = sheetName;
+      break;
+    }
+  }
+
+  if (!hotelSheet) {
+    console.log('未找到酒店工作表，尝试的名称:', possibleSheetNames);
+    console.log('当前所有工作表:', workbook.worksheets.map((ws: any) => ws.name));
+    ElMessage.warning('未找到酒店工作表，支持的工作表名称：国内酒店、酒店、酒店票、国内酒店票');
+    return { departmentData: {}, columnMapping: {}, processedRows: 0 };
+  }
+
+  console.log(`找到酒店工作表: "${foundSheetName}"`);
+
+  // 读取国内酒店数据（包含空单元格）
+  const hotelData: any[][] = [];
+  hotelSheet.eachRow((row: any, rowNumber: number) => {
+    const rowData: any[] = [];
+    row.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
+      rowData.push(cell.value);
+    });
+    hotelData.push(rowData);
+  });
+
+  console.log(`国内酒店数据行数: ${hotelData.length}`);
+
+  if (hotelData.length < 2) {
+    console.log('国内酒店数据行数不足，跳过处理');
+    return { departmentData: {}, columnMapping: {}, processedRows: 0 };
+  }
+
+  // 获取表头
+  const headers = hotelData[0];
+  console.log('国内酒店表头:', headers);
+
+  // 查找"费用归属"列的索引
+  const costBelongIndex = headers.findIndex((h: any) =>
+    h && h.toString().includes('费用归属')
+  );
+
+  if (costBelongIndex === -1) {
+    console.error('未找到国内酒店"费用归属"列');
+    ElMessage.warning('国内酒店工作表格式不正确，缺少"费用归属"列');
+    return { departmentData: {}, columnMapping: {}, processedRows: 0 };
+  }
+
+  console.log(`国内酒店费用归属列索引: ${costBelongIndex}`);
+
+  // 查找所有需要映射的列（新表头 -> 原表头映射）
+  const columnMapping: { [key: string]: number } = {
+    '记账日期': headers.findIndex((h: any) => h && h.toString().includes('记账日期')),
+    '订单状态': headers.findIndex((h: any) => h && h.toString().includes('订单状态')),
+    '预订人': headers.findIndex((h: any) => h && (h.toString().includes('预订人') || h.toString().includes('预定人'))),
+    '入住人': headers.findIndex((h: any) => h && h.toString().includes('入住人')),
+    '费用归属': costBelongIndex,
+    '入住日期': headers.findIndex((h: any) => h && h.toString().includes('入住日期')),
+    '离店日期': headers.findIndex((h: any) => h && h.toString().includes('离店日期')),
+    '酒店城市': headers.findIndex((h: any) => h && h.toString().includes('酒店城市')),
+    '酒店名称': headers.findIndex((h: any) => h && h.toString().includes('酒店名称')),
+    '夜数': headers.findIndex((h: any) => h && h.toString().includes('夜数')),
+    '订房费用': headers.findIndex((h: any) => h && h.toString().includes('订房费用')),
+    '系统使用费': headers.findIndex((h: any) => h && h.toString().includes('系统使用费')),
+    '酒店托管费': headers.findIndex((h: any) => h && h.toString().includes('酒店托管费')),
+    '代购费': headers.findIndex((h: any) => h && h.toString().includes('代购费')),
+    '总金额': headers.findIndex((h: any) => h && h.toString().includes('总金额'))
+  };
+
+  console.log('国内酒店列映射:', columnMapping);
+
+  // 按部门分组数据
+  const departmentData: { [key: string]: any[][] } = {};
+  let processedRows = 0;
+
+  // 从第二行开始处理数据（跳过表头）
+  for (let i = 1; i < hotelData.length; i++) {
+    const row = hotelData[i];
+    const costBelong = row[costBelongIndex]?.toString().trim();
+
+    if (!costBelong) {
+      console.log(`国内酒店第 ${i + 1} 行费用归属为空，跳过`);
+      continue;
+    }
+
+    // 提取部门名称，兼容多种格式
+    let departmentName = costBelong;
+    console.log(`原始费用归属: "${costBelong}"`);
+
+    // 尝试多种格式的部门名称提取
+    if (costBelong.startsWith('商务-酒店-')) {
+      departmentName = costBelong.replace('商务-酒店-', '');
+    } else if (costBelong.includes('-酒店-')) {
+      // 处理其他格式，如"其他-酒店-部门名"
+      const parts = costBelong.split('-酒店-');
+      if (parts.length === 2) {
+        departmentName = parts[1];
+      }
+    } else if (costBelong.startsWith('商务-机票-')) {
+      // 如果是机票格式，提取部门名
+      departmentName = costBelong.replace('商务-机票-', '');
+    } else if (costBelong.includes('-机票-')) {
+      const parts = costBelong.split('-机票-');
+      if (parts.length === 2) {
+        departmentName = parts[1];
+      }
+    } else {
+      // 如果都没有匹配到，直接使用原值
+      departmentName = costBelong;
+    }
+
+    console.log(`提取的部门名称: "${departmentName}"`);
+
+    // 如果部门不存在，创建新的数组
+    if (!departmentData[departmentName]) {
+      departmentData[departmentName] = [];
+    }
+
+    // 将数据行添加到对应部门
+    departmentData[departmentName].push(row);
+    processedRows++;
+  }
+
+  console.log('国内酒店部门分组结果:', departmentData);
+  console.log(`处理了国内酒店 ${processedRows} 行数据，分成了 ${Object.keys(departmentData).length} 个部门`);
+
+  if (processedRows === 0) {
+    console.warn('警告：没有处理到任何国内酒店数据');
+    ElMessage.warning('未找到有效的国内酒店数据，请检查工作表名称和数据格式');
+  }
+
+  return { departmentData, columnMapping, processedRows };
+};
+
 // 生成火车票部门报告
 const generateTrainDepartmentReport = async (departmentName: string, trainData: any[], columnMapping: any) => {
   const fullDepartmentName = `商务-火车-${departmentName}`;
@@ -1088,6 +1043,20 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
     totalRow.font = { bold: true };
     totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
     totalRow.getCell(17).numFmt = '#,##0.00'; // 应还款总金额数字格式
+
+    // 添加签名行（最后一行的下一行）
+    const signatureRow = worksheet.addRow([
+      '', '经办人：', '', '', '审核人：', '', '', '日期：', '', '', '部门负责人审批：', '', '', ''
+    ]);
+
+    // 设置签名行样式
+    signatureRow.font = { bold: true };
+
+    // 合并单元格用于签名信息
+    worksheet.mergeCells(signatureRow.number, 2, signatureRow.number, 4); // 合并B-D列（第2-4列）经办人
+    worksheet.mergeCells(signatureRow.number, 5, signatureRow.number, 7); // 合并E-G列（第5-7列）审核人
+    worksheet.mergeCells(signatureRow.number, 8, signatureRow.number, 10); // 合并H-J列（第8-10列）日期
+    worksheet.mergeCells(signatureRow.number, 11, signatureRow.number, 13); // 合并K-M列（第11-13列）部门负责人审批
 
     // 设置列宽
     for (let i = 1; i <= 17; i++) {
@@ -1378,6 +1347,20 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
     totalRow.getCell(18).numFmt = '#,##0.00'; // 服务费
     totalRow.getCell(19).numFmt = '#,##0.00'; // 应还款总金额
 
+    // 添加签名行（最后一行的下一行）
+    const signatureRow = worksheet.addRow([
+      '', '经办人：', '', '', '审核人：', '', '', '日期：', '', '', '部门负责人审批：', '', '', ''
+    ]);
+
+    // 设置签名行样式
+    signatureRow.font = { bold: true };
+
+    // 合并单元格用于签名信息
+    worksheet.mergeCells(signatureRow.number, 2, signatureRow.number, 4); // 合并B-D列（第2-4列）经办人
+    worksheet.mergeCells(signatureRow.number, 5, signatureRow.number, 7); // 合并E-G列（第5-7列）审核人
+    worksheet.mergeCells(signatureRow.number, 8, signatureRow.number, 10); // 合并H-J列（第8-10列）日期
+    worksheet.mergeCells(signatureRow.number, 11, signatureRow.number, 13); // 合并K-M列（第11-13列）部门负责人审批
+
     // 设置列宽
     for (let i = 1; i <= 20; i++) {
       worksheet.getColumn(i).width = 15;
@@ -1413,8 +1396,325 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
   }
 };
 
+// 生成酒店部门报告
+const generateHotelDepartmentReport = async (departmentName: string, hotelData: any[], columnMapping: any, headers: any[] = []) => {
+  const fullDepartmentName = `商务-酒店-${departmentName}`;
+
+  try {
+    console.log(`=== 生成 ${fullDepartmentName} 酒店部门报告 ===`);
+
+    // 创建新的工作簿
+    const newWorkbook = new ExcelJS.Workbook();
+    const worksheet = newWorkbook.addWorksheet(fullDepartmentName);
+
+    // 计算上个月日期
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const year = lastMonth.getFullYear();
+    const month = lastMonth.getMonth() + 1;
+    const monthStr = month.toString().padStart(2, '0');
+
+    // 第一行：标题
+    const titleRow = worksheet.addRow([`华安保险${year}年${month}月酒店对账单`]);
+    titleRow.font = { bold: true, size: 16 };
+    titleRow.alignment = { horizontal: 'center' };
+    worksheet.mergeCells(1, 1, 1, 18);
+
+    // 第二行：部门信息
+    const deptRow = worksheet.addRow([`部门：${departmentName}`]);
+    deptRow.font = { bold: true };
+    worksheet.mergeCells(2, 1, 2, 18);
+
+    // 第三行：酒店表头
+    const hotelHeaders = [
+      '预订/退款日期', '订单状态', '预订人', '旅客姓名', '旅客直属部门', '入住日期', '离店日期', '入住城市',
+      '酒店名称', '间夜数', '平均客房单价', '销售总价', '企业支付', '服务费', '应还款总金额', '酒店开票类型', '备注'
+    ];
+    const headerRow = worksheet.addRow(hotelHeaders);
+    headerRow.font = { bold: true };
+
+    // 处理酒店数据
+    const processedHotelData = hotelData.map((originalRow, rowIndex) => {
+      // 计算服务费 = 系统使用费 + 酒店托管费 + 代购费
+      const systemUsageFee = parseFloat(originalRow[columnMapping['系统使用费']]) || 0;
+      const hotelManagementFee = parseFloat(originalRow[columnMapping['酒店托管费']]) || 0;
+      const purchaseFee = parseFloat(originalRow[columnMapping['代购费']]) || 0;
+      const totalServiceFee = systemUsageFee + hotelManagementFee + purchaseFee;
+
+      // 获取订房费用、退订费用和夜数，处理可能是公式对象的情况
+      let bookingFeeRaw = originalRow[columnMapping['订房费用']];
+      let nightCountRaw = originalRow[columnMapping['夜数']];
+
+      // 查找退订费用列
+      const cancelFeeIndex = headers.findIndex((h: any) =>
+        h && (h.toString().includes('退订费用') || h.toString().includes('退订费') || h.toString().includes('退房费用'))
+      );
+      let cancelFeeRaw = cancelFeeIndex !== -1 ? originalRow[cancelFeeIndex] : 0;
+
+      // 调试日志：检查数据值（对所有行都输出）
+      console.log(`=== 酒店数据处理调试信息 - 第${rowIndex + 1}行 ===`);
+      console.log('原始行数据:', originalRow);
+      console.log('列映射:', columnMapping);
+      console.log('订房费用列索引:', columnMapping['订房费用']);
+      console.log('夜数列索引:', columnMapping['夜数']);
+      console.log('退订费用列索引:', cancelFeeIndex);
+      console.log('订房费用原始值:', bookingFeeRaw, '类型:', typeof bookingFeeRaw);
+      console.log('夜数原始值:', nightCountRaw, '类型:', typeof nightCountRaw);
+      console.log('退订费用原始值:', cancelFeeRaw, '类型:', typeof cancelFeeRaw);
+
+      // 处理可能是公式对象的情况
+      let bookingFee = 0;
+      let nightCount = 0;
+      let cancelFee = 0;
+
+      if (bookingFeeRaw !== null && bookingFeeRaw !== undefined) {
+        if (typeof bookingFeeRaw === 'object' && bookingFeeRaw.result !== undefined) {
+          // 如果是公式对象，使用计算结果
+          bookingFee = parseFloat(bookingFeeRaw.result) || 0;
+          console.log('订房费用是公式对象，使用结果值:', bookingFee);
+        } else {
+          // 如果是普通值，直接解析
+          bookingFee = parseFloat(bookingFeeRaw) || 0;
+          console.log('订房费用是普通值，解析结果:', bookingFee);
+        }
+      }
+
+      if (nightCountRaw !== null && nightCountRaw !== undefined) {
+        if (typeof nightCountRaw === 'object' && nightCountRaw.result !== undefined) {
+          // 如果是公式对象，使用计算结果
+          nightCount = parseFloat(nightCountRaw.result) || 0;
+          console.log('夜数是公式对象，使用结果值:', nightCount);
+        } else {
+          // 如果是普通值，直接解析
+          nightCount = parseFloat(nightCountRaw) || 0;
+          console.log('夜数是普通值，解析结果:', nightCount);
+        }
+      }
+
+      if (cancelFeeRaw !== null && cancelFeeRaw !== undefined) {
+        if (typeof cancelFeeRaw === 'object' && cancelFeeRaw.result !== undefined) {
+          // 如果是公式对象，使用计算结果
+          cancelFee = parseFloat(cancelFeeRaw.result) || 0;
+          console.log('退订费用是公式对象，使用结果值:', cancelFee);
+        } else {
+          // 如果是普通值，直接解析
+          cancelFee = parseFloat(cancelFeeRaw) || 0;
+          console.log('退订费用是普通值，解析结果:', cancelFee);
+        }
+      }
+
+      // 计算平均客房单价 = (订房费用 + 退订费用) / 夜数
+      const totalFee = bookingFee + cancelFee;
+      const averageRoomPrice = nightCount > 0 ? totalFee / nightCount : 0;
+      console.log('计算的平均客房单价:', averageRoomPrice, '(订房费用:', bookingFee, ', 退订费用:', cancelFee, ', 总费用:', totalFee, ', 夜数:', nightCount, ')');
+      console.log('========================================\n');
+
+      return {
+        processedRow: [
+          originalRow[columnMapping['记账日期']] || '', // 预订/退款日期 -> 记账日期
+          originalRow[columnMapping['订单状态']] || '', // 订单状态
+          originalRow[columnMapping['预订人']] || '', // 预订人
+          originalRow[columnMapping['入住人']] || '', // 旅客姓名 -> 入住人
+          originalRow[columnMapping['费用归属']] || '', // 旅客直属部门 -> 费用归属
+          originalRow[columnMapping['入住日期']] || '', // 入住日期
+          originalRow[columnMapping['离店日期']] || '', // 离店日期
+          originalRow[columnMapping['酒店城市']] || '', // 入住城市 -> 酒店城市
+          originalRow[columnMapping['酒店名称']] || '', // 酒店名称
+          originalRow[columnMapping['夜数']] || 0, // 间夜数 -> 夜数
+          averageRoomPrice, // 平均客房单价 = 订房费用 / 夜数
+          undefined, // 销售总价 - 稍后设置公式
+          '', // 企业支付 - 留空
+          totalServiceFee, // 服务费 = 系统使用费 + 酒店托管费 + 代购费
+          '', // 应还款总金额 - 留空
+          '专票', // 酒店开票类型 - 写死专票
+          '' // 备注 - 留空
+        ],
+        passengerName: originalRow[columnMapping['入住人']] || '',
+        checkInDate: originalRow[columnMapping['入住日期']] || '',
+        originalRow: originalRow,
+        serviceFee: totalServiceFee,
+        averageRoomPrice: averageRoomPrice
+      };
+    });
+
+    // 按旅客姓名分组和排序
+    const passengerNames = Array.from(new Set(processedHotelData.map(item => item.passengerName || '未知乘客')));
+    passengerNames.sort((a, b) => a.localeCompare(b, 'zh-CN'));
+
+    const groupedByPassenger: { [key: string]: typeof processedHotelData } = {};
+    passengerNames.forEach(passengerName => {
+      const passengerData = processedHotelData.filter(item =>
+        (item.passengerName || '未知乘客') === passengerName
+      );
+      groupedByPassenger[passengerName] = passengerData;
+    });
+
+    // 对每个分组按入住日期排序
+    Object.keys(groupedByPassenger).forEach(passengerName => {
+      groupedByPassenger[passengerName].sort((a, b) => {
+        const dateA = new Date(a.checkInDate || '').getTime();
+        const dateB = new Date(b.checkInDate || '').getTime();
+        return dateA - dateB;
+      });
+    });
+
+    // 添加数据行和小计
+    let currentRowNumber = 4; // 数据从第4行开始
+    Object.keys(groupedByPassenger).forEach(passengerName => {
+      const passengerData = groupedByPassenger[passengerName];
+
+      // 添加该乘客的所有数据行
+      passengerData.forEach(item => {
+        const newRow = worksheet.addRow(item.processedRow);
+
+        // 设置销售总价公式（第12列）= 平均客房单价 × 间夜数
+        const salesTotalCell = newRow.getCell(12);
+        salesTotalCell.value = {
+          formula: `=K${currentRowNumber}*J${currentRowNumber}`,
+          result: 0
+        };
+
+        // 设置企业支付公式（第13列），直接引用销售总价
+        const enterprisePaymentCell = newRow.getCell(13);
+        enterprisePaymentCell.value = {
+          formula: `=L${currentRowNumber}`,
+          result: 0
+        };
+
+        // 设置应还款总金额公式（第15列）= 销售总价 + 服务费
+        const totalAmountCell = newRow.getCell(15);
+        totalAmountCell.value = {
+          formula: `=L${currentRowNumber}+N${currentRowNumber}`,
+          result: 0
+        };
+
+        currentRowNumber++;
+      });
+
+      // 添加小计行
+      if (passengerData.length > 0) {
+        const startRow = currentRowNumber - passengerData.length;
+        const endRow = currentRowNumber - 1;
+
+        const subtotalRow = worksheet.addRow([
+          '', '', '', '', // 预订/退款日期、订单状态、预订人、旅客姓名留空
+          '小计', // 旅客直属部门列显示"小计"
+          '', '', '', '', // 入住日期、离店日期、入住城市、酒店名称留空
+          '', // 间夜数（第10列）留空
+          '', // 平均客房单价（第11列）留空
+          '', // 销售总价（第12列）留空
+          '', // 企业支付（第13列）留空
+          '', // 服务费（第14列）留空
+          { // 应还款总金额（第15列）设置求和公式
+            formula: `=SUM(O${startRow}:O${endRow})`,
+            result: 0
+          },
+          '', // 酒店开票类型留空
+          '' // 备注留空
+        ]);
+
+        // 设置小计行样式
+        subtotalRow.font = { bold: true };
+        subtotalRow.getCell(5).alignment = { horizontal: 'right' }; // 小计文字右对齐
+        subtotalRow.getCell(15).numFmt = '#,##0.00'; // 应还款总金额数字格式
+
+        currentRowNumber++;
+      }
+    });
+
+    // 添加总计行
+    const totalStartRow = 4; // 数据开始行
+    const totalEndRow = currentRowNumber - 1; // 最后一行数据（包括小计行）
+
+    const totalRow = worksheet.addRow([
+      '', '', '', '', // 预订/退款日期、订单状态、预订人、旅客姓名留空
+      '', // 旅客直属部门留空
+      '', '', '', '', // 入住日期、离店日期、入住城市、酒店名称留空
+      { // 间夜数（第10列）求和
+        formula: `=SUM(J${totalStartRow}:J${totalEndRow})`,
+        result: 0
+      },
+      { // 平均客房单价（第11列）计算加权平均
+        formula: `=IF(SUM(J${totalStartRow}:J${totalEndRow})=0,0,SUMPRODUCT(K${totalStartRow}:K${totalEndRow},J${totalStartRow}:J${totalEndRow})/SUM(J${totalStartRow}:J${totalEndRow}))`,
+        result: 0
+      },
+      { // 销售总价（第12列）求和
+        formula: `=SUM(L${totalStartRow}:L${totalEndRow})`,
+        result: 0
+      },
+      { // 企业支付（第13列）求和
+        formula: `=SUM(M${totalStartRow}:M${totalEndRow})`,
+        result: 0
+      },
+      { // 服务费（第14列）求和
+        formula: `=SUM(N${totalStartRow}:N${totalEndRow})`,
+        result: 0
+      },
+      { // 应还款总金额（第15列）对小计行求和
+        formula: `=SUMIF(E${totalStartRow}:E${totalEndRow},"小计",O${totalStartRow}:O${totalEndRow})`,
+        result: 0
+      },
+      '', // 酒店开票类型留空
+      '' // 备注留空
+    ]);
+
+    // 设置总计行样式
+    totalRow.font = { bold: true };
+    totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
+
+    // 设置总计行的数字格式
+    totalRow.getCell(10).numFmt = '#,##0.00'; // 间夜数
+    totalRow.getCell(11).numFmt = '#,##0.00'; // 平均客房单价
+    totalRow.getCell(12).numFmt = '#,##0.00'; // 销售总价
+    totalRow.getCell(13).numFmt = '#,##0.00'; // 企业支付
+    totalRow.getCell(14).numFmt = '#,##0.00'; // 服务费
+    totalRow.getCell(15).numFmt = '#,##0.00'; // 应还款总金额
+
+    // 添加签名行（最后一行的下一行）
+    const signatureRow = worksheet.addRow([
+      '', '经办人：', '', '', '审核人：', '', '', '日期：', '', '', '部门负责人审批：', '', '', ''
+    ]);
+
+    // 设置签名行样式
+    signatureRow.font = { bold: true };
+
+    // 合并单元格用于签名信息
+    worksheet.mergeCells(signatureRow.number, 2, signatureRow.number, 4); // 合并B-D列（第2-4列）经办人
+    worksheet.mergeCells(signatureRow.number, 5, signatureRow.number, 7); // 合并E-G列（第5-7列）审核人
+    worksheet.mergeCells(signatureRow.number, 8, signatureRow.number, 10); // 合并H-J列（第8-10列）日期
+    worksheet.mergeCells(signatureRow.number, 11, signatureRow.number, 13); // 合并K-M列（第11-13列）部门负责人审批
+
+    // 设置列宽
+    for (let i = 1; i <= 18; i++) {
+      worksheet.getColumn(i).width = 15;
+    }
+
+    // 设置金额列的数字格式
+    worksheet.getColumn(10).numFmt = '#,##0.00'; // 间夜数
+    worksheet.getColumn(11).numFmt = '#,##0.00'; // 平均客房单价
+    worksheet.getColumn(12).numFmt = '#,##0.00'; // 销售总价
+    worksheet.getColumn(13).numFmt = '#,##0.00'; // 企业支付
+    worksheet.getColumn(14).numFmt = '#,##0.00'; // 服务费
+    worksheet.getColumn(15).numFmt = '#,##0.00'; // 应还款总金额
+
+    // 生成文件
+    const fileName = `${fullDepartmentName}.xlsx`;
+    generatedFiles.value.push({
+      fileName,
+      departmentName: fullDepartmentName,
+      rowCount: hotelData.length,
+      workbook: newWorkbook
+    });
+
+    console.log(`已准备生成酒店文件: ${fileName}, 包含 ${hotelData.length} 条数据`);
+
+  } catch (error) {
+    console.error(`生成 ${fullDepartmentName} 酒店部门报告失败:`, error);
+  }
+};
+
 const generateExcelFiles = async () => {
-  if (!processedWorkbook.value || allSheetData.value.length === 0) {
+  if (!originalWorkbook.value || allSheetData.value.length === 0) {
     ElMessage.error("请先上传并处理Excel文件");
     return;
   }
@@ -1440,15 +1740,7 @@ const generateExcelFiles = async () => {
       }
     }
 
-    // 生成通用产品处理文件并添加到ZIP
-    const workbook = processedWorkbook.value;
-    const excelBuffer = await workbook.xlsx.writeBuffer();
-    const fileName = `华安保险_通用产品处理结果_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    zip.file(fileName, excelBuffer);
-    totalFiles++;
-
-    console.log(`已添加到ZIP: ${fileName}`);
-
+  
     // 生成ZIP文件
     const zipContent = await zip.generateAsync({ type: "blob" });
     const zipFileName = `华安保险处理结果_${new Date().toISOString().slice(0, 10)}.zip`;
@@ -1456,15 +1748,10 @@ const generateExcelFiles = async () => {
     saveAs(zipContent, zipFileName);
 
     console.log(`ZIP文件生成完成: ${zipFileName}`);
-    console.log(`匹配记录数: ${matchedRows.value.length}`);
     console.log(`部门拆分文件数: ${generatedFiles.value.length}`);
     console.log(`总文件数: ${totalFiles}`);
 
-    if (matchedRows.value.length > 0) {
-      console.log('匹配详情:', matchedRows.value);
-    }
-
-    ElMessage.success(`成功生成ZIP包！包含 ${totalFiles} 个文件 (${generatedFiles.value.length} 个部门文件 + 1 个通用产品处理文件)`);
+    ElMessage.success(`成功生成ZIP包！包含 ${totalFiles} 个部门拆分文件`);
 
   } catch (error) {
     console.error("生成ZIP文件失败:", error);
