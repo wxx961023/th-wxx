@@ -96,6 +96,67 @@ const generating = ref(false);
 const originalWorkbook = ref<any>(null);
 const generatedFiles = ref<any[]>([]); // 记录生成的文件
 
+// 智能列宽设置函数
+const setSmartColumnWidths = (worksheet: any, headers: string[], data: any[] = [], tableType: string = '') => {
+  console.log(`开始设置智能列宽，表格类型: ${tableType}`);
+  console.log('表头列表:', headers);
+
+  headers.forEach((header, columnIndex) => {
+    const columnNumber = columnIndex + 1;
+    let maxLength = header.toString().length; // 先以表头长度为基准
+
+    // 遍历数据行，找到该列最长的内容
+    data.forEach(row => {
+      const cellValue = row[columnIndex] || '';
+      const textLength = cellValue.toString().length;
+      if (textLength > maxLength) {
+        maxLength = textLength;
+      }
+    });
+
+    // 根据内容长度设置列宽，使用系数调整
+    let columnWidth;
+    if (maxLength <= 5) {
+      columnWidth = maxLength * 2.5; // 短内容使用较大系数
+    } else if (maxLength <= 10) {
+      columnWidth = maxLength * 2.0; // 中等内容
+    } else if (maxLength <= 20) {
+      columnWidth = maxLength * 1.5; // 较长内容使用较小系数
+    } else {
+      columnWidth = maxLength * 1.2; // 很长内容使用更小系数，并限制最大宽度
+      columnWidth = Math.min(columnWidth, 50); // 最大宽度限制为50
+    }
+
+    // 为特定列增加额外的宽度系数
+    const specialColumns = [
+      '旅客直属部门', '应还款总金额', '酒店开票类型',
+      '平均客房单价', '预订/退款日期', '座位编号'
+    ];
+
+    // 需要更大宽度系数的特殊列
+    const extraWideColumns = ['出发时间'];
+    // 火车票表格的行程列需要特别大的宽度
+    if (tableType === 'train' && header === '行程') {
+      columnWidth *= 2.5; // 火车票行程列增加150%的宽度
+      console.log(`第${columnNumber}列"${header}"是火车票行程列，增加150%宽度，基础宽度：${columnWidth / 2.5}，最终宽度：${columnWidth}`);
+    } else if (extraWideColumns.includes(header)) {
+      columnWidth *= 1.8; // 为这些列增加80%的宽度
+      console.log(`第${columnNumber}列"${header}"是需要大宽度的列，增加80%宽度，基础宽度：${columnWidth / 1.8}，最终宽度：${columnWidth}`);
+    } else if (specialColumns.includes(header)) {
+      columnWidth *= 1.3; // 为其他特殊列增加30%的宽度
+      console.log(`第${columnNumber}列"${header}"是特殊列，增加30%宽度，基础宽度：${columnWidth / 1.3}，最终宽度：${columnWidth}`);
+    } else {
+      console.log(`第${columnNumber}列"${header}"使用标准宽度：${columnWidth}`);
+    }
+
+    // 设置最小宽度
+    columnWidth = Math.max(columnWidth, 8);
+
+    worksheet.getColumn(columnNumber).width = columnWidth;
+    console.log(`第${columnNumber}列"${header}": 最长内容${maxLength}字符, 设置宽度${columnWidth.toFixed(1)}`);
+  });
+};
+
 const handleFileChange = (uploadFile: any) => {
   const file = uploadFile.raw;
   if (!file) return;
@@ -362,7 +423,7 @@ const convertEnglishNameToChinese = (englishName: string): string => {
   const nameMap: { [key: string]: string } = {
     'ZHAO/QUAN': '赵权',
     'LIU/XIANGONG': '刘现功',
-    'LI/RONGGUANG': '李荣光'
+    'LI/GUANGRONG': '李光荣'
   };
 
   const upperName = englishName.toString().trim().toUpperCase();
@@ -908,14 +969,17 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
 
     // 第一行：标题
     const titleRow = worksheet.addRow([`华安保险${year}年${month}月火车对账单`]);
-    titleRow.font = { bold: true, size: 16 };
-    titleRow.alignment = { horizontal: 'center' };
+    titleRow.font = { bold: true, size: 22, name: '微软雅黑' };
+    titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.mergeCells(1, 1, 1, 17);
+    worksheet.getRow(1).height = 53;
 
     // 第二行：部门信息
     const deptRow = worksheet.addRow([`部门：${departmentName}`]);
-    deptRow.font = { bold: true };
+    deptRow.font = { bold: true, size: 12 };
+    deptRow.alignment = { vertical: 'middle' };
     worksheet.mergeCells(2, 1, 2, 17);
+    worksheet.getRow(2).height = 30;
 
     // 第三行：火车票表头
     const trainHeaders = [
@@ -923,7 +987,25 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
       '坐席', '座位编号', '车票单价', '改签费', '退票费', '销售总价', '企业支付', '服务费', '应还款总金额'
     ];
     const headerRow = worksheet.addRow(trainHeaders);
-    headerRow.font = { bold: true };
+    headerRow.font = { bold: true, color: { argb: 'FFFFFF' } }; // 白色字体
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' }; // 居中对齐
+    worksheet.getRow(3).height = 30;
+
+    // 设置表头行的填充颜色和边框
+    for (let i = 1; i <= 17; i++) {
+      const cell = headerRow.getCell(i);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFF8E22' } // #FF8E22 橙色
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    }
 
     // 处理火车票数据
     const processedTrainData = trainData.map((originalRow) => {
@@ -992,8 +1074,22 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
       // 添加该乘客的所有数据行
       passengerData.forEach(item => {
         const newRow = worksheet.addRow(item.processedRow);
+        worksheet.getRow(newRow.number).height = 30;
 
-        // 火车票的销售总价和企业支付留空，不设置公式
+        // 设置销售总价和企业支付公式
+        // 销售总价（第14列）= 车票单价 + 改签费 + 退票费
+        const salesTotalCell = newRow.getCell(14);
+        salesTotalCell.value = {
+          formula: `=K${currentRowNumber}+L${currentRowNumber}+M${currentRowNumber}`,
+          result: 0
+        };
+
+        // 企业支付（第15列）= 销售总价
+        const enterprisePaymentCell = newRow.getCell(15);
+        enterprisePaymentCell.value = {
+          formula: `=N${currentRowNumber}`,
+          result: 0
+        };
         currentRowNumber++;
       });
 
@@ -1003,20 +1099,21 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
         const endRow = currentRowNumber - 1;
 
         const subtotalRow = worksheet.addRow([
-          '', '', '', '', // 预订/退款日期、订单状态、预订人、旅客姓名留空
-          '小计', // 旅客直属部门列显示"小计"
-          '', '', '', '', // 行程、车次、出发时间、坐席留空
-          '', '', '', '', '', '', // 座位编号、车票单价、改签费、退票费、销售总价、企业支付留空
-          '', // 服务费留空
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', // 前16列全部留空，将合并显示"小计"
           { // 应还款总金额（第17列）设置求和公式
             formula: `=SUM(Q${startRow}:Q${endRow})`,
             result: 0
           }
         ]);
+        worksheet.getRow(subtotalRow.number).height = 30;
+
+        // 合并小计行的第1列到第16列，用于显示"小计"文字
+        worksheet.mergeCells(subtotalRow.number, 1, subtotalRow.number, 16);
 
         // 设置小计行样式
         subtotalRow.font = { bold: true };
-        subtotalRow.getCell(5).alignment = { horizontal: 'right' }; // 小计文字右对齐
+        subtotalRow.getCell(1).value = '小计'; // 在合并后的第一个单元格中设置"小计"文字
+        subtotalRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' }; // 小计文字右对齐垂直居中
         subtotalRow.getCell(17).numFmt = '#,##0.00'; // 设置应还款总金额的数字格式
 
         currentRowNumber++;
@@ -1034,15 +1131,19 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
       '', '', '', '', '', '', // 座位编号、车票单价、改签费、退票费、销售总价、企业支付留空
       '', // 服务费留空
       { // 应还款总金额（第17列）对小计行求和
-        formula: `=SUMIF(E${totalStartRow}:E${totalEndRow},"小计",Q${totalStartRow}:Q${totalEndRow})`,
+        formula: `=SUMIF(A${totalStartRow}:A${totalEndRow},"小计",Q${totalStartRow}:Q${totalEndRow})`,
         result: 0
       }
     ]);
+    worksheet.getRow(totalRow.number).height = 30;
 
     // 设置总计行样式
     totalRow.font = { bold: true };
     totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
     totalRow.getCell(17).numFmt = '#,##0.00'; // 应还款总金额数字格式
+
+    // 合并总计行的第1列到第16列
+    worksheet.mergeCells(totalRow.number, 1, totalRow.number, 16);
 
     // 添加签名行（最后一行的下一行）
     const signatureRow = worksheet.addRow([
@@ -1050,7 +1151,8 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
     ]);
 
     // 设置签名行样式
-    signatureRow.font = { bold: true };
+    signatureRow.alignment = { vertical: 'middle' }; // 签名行垂直居中
+    worksheet.getRow(signatureRow.number).height = 66; // 签名行高度设置为66磅
 
     // 合并单元格用于签名信息
     worksheet.mergeCells(signatureRow.number, 2, signatureRow.number, 4); // 合并B-D列（第2-4列）经办人
@@ -1058,10 +1160,59 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
     worksheet.mergeCells(signatureRow.number, 8, signatureRow.number, 10); // 合并H-J列（第8-10列）日期
     worksheet.mergeCells(signatureRow.number, 11, signatureRow.number, 13); // 合并K-M列（第11-13列）部门负责人审批
 
-    // 设置列宽
-    for (let i = 1; i <= 17; i++) {
-      worksheet.getColumn(i).width = 15;
+    // 设置第四行到总计行的样式（跳过第3行表头）
+    for (let i = 4; i <= totalRow.number; i++) {
+      const row = worksheet.getRow(i);
+
+      // 检查是否是小计行，如果是则设置行高为30磅
+      const cell = row.getCell(1); // 第1列是小计标识列
+      if (cell.value && cell.value.toString() === '小计') {
+        row.height = 30;
+      }
+
+      // 设置每个单元格的样式
+      for (let j = 1; j <= 17; j++) {
+        const cell = row.getCell(j);
+
+        // 如果是小计行的第一个单元格，保持原有的右对齐设置
+        const isSubtotalRow = cell.value && cell.value.toString() === '小计';
+
+        if (!isSubtotalRow) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+
+        cell.font = { size: 10 };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      }
     }
+
+    // 收集所有数据行用于智能列宽计算
+    const allTrainData = trainData.map(row => [
+      row['预订/退款日期'] || '',
+      row['订单状态'] || '',
+      row['预订人'] || '',
+      row['旅客姓名'] || '',
+      row['旅客直属部门'] || '',
+      row['行程'] || '',
+      row['车次'] || '',
+      row['出发时间'] || '',
+      row['坐席'] || '',
+      row['座位编号'] || '',
+      row['车票单价'] || 0,
+      row['改签费'] || 0,
+      row['退票费'] || 0,
+      row['销售总价'] || 0,
+      row['企业支付'] || 0,
+      row['服务费'] || 0,
+      row['应还款总金额'] || 0
+    ]);
+
+    setSmartColumnWidths(worksheet, trainHeaders, allTrainData, 'train');
 
     // 设置金额列的数字格式
     worksheet.getColumn(11).numFmt = '#,##0.00'; // 车票单价
@@ -1088,6 +1239,18 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
 
 // 生成机票部门报告
 const generateFlightDepartmentReport = async (departmentName: string, flightData: Array<{data: any[], type: string}>, columnMappings: { domestic: any, international: any }) => {
+  // 处理贵宾部门名称的特殊逻辑
+  const isVip = departmentName === '贵宾';
+  const displayDepartmentName = isVip ? '无' : departmentName;
+
+  // 对于贵宾部门，需要先获取旅客姓名来动态设置工作表名和文件名
+  let passengerName = '';
+  if (isVip && flightData.length > 0) {
+    const columnMapping = flightData[0].type === 'international-flight' ? columnMappings.international : columnMappings.domestic;
+    passengerName = flightData[0].data[columnMapping['旅客姓名']] || '';
+  }
+
+  const worksheetName = isVip ? `商务-机票-${passengerName}` : `商务-机票-${departmentName}`;
   const fullDepartmentName = `商务-机票-${departmentName}`;
 
   try {
@@ -1095,7 +1258,7 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
 
     // 创建新的工作簿
     const newWorkbook = new ExcelJS.Workbook();
-    const worksheet = newWorkbook.addWorksheet(fullDepartmentName);
+    const worksheet = newWorkbook.addWorksheet(worksheetName);
 
     // 计算上个月日期
     const now = new Date();
@@ -1106,14 +1269,17 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
 
     // 第一行：标题
     const titleRow = worksheet.addRow([`华安保险${year}年${month}月机票对账单`]);
-    titleRow.font = { bold: true, size: 16 };
-    titleRow.alignment = { horizontal: 'center' };
+    titleRow.font = { bold: true, size: 22, name: '微软雅黑' };
+    titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.mergeCells(1, 1, 1, 20);
+    worksheet.getRow(1).height = 53;
 
     // 第二行：部门信息
-    const deptRow = worksheet.addRow([`部门：${departmentName}`]);
-    deptRow.font = { bold: true };
+    const deptRow = worksheet.addRow([`部门：${displayDepartmentName}`]);
+    deptRow.font = { bold: true, size: 12 };
+    deptRow.alignment = { vertical: 'middle' };
     worksheet.mergeCells(2, 1, 2, 20);
+    worksheet.getRow(2).height = 30;
 
     // 第三行：表头
     const headers = [
@@ -1122,7 +1288,25 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
       '企业支付', '服务费', '应还款总金额', '签字确认'
     ];
     const headerRow = worksheet.addRow(headers);
-    headerRow.font = { bold: true };
+    headerRow.font = { bold: true, color: { argb: 'FFFFFF' } }; // 白色字体
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' }; // 居中对齐
+    worksheet.getRow(3).height = 30;
+
+    // 设置表头行的填充颜色和边框
+    for (let i = 1; i <= 20; i++) {
+      const cell = headerRow.getCell(i);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFF8E22' } // #FF8E22 橙色
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    }
 
     // 处理机票数据
     const processedAllData = flightData.map(({ data: originalRow, type }) => {
@@ -1157,9 +1341,12 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
         processedPassengerName = originalRow[columnMapping['旅客姓名']] || '';
       }
 
+      // 动支号列都是空的，直接设置为空字符串
+      const dongzhikaoValue = '';
+
       return {
         processedRow: [
-          '', // 动支号 - 留空
+          dongzhikaoValue, // 动支号
           originalRow[columnMapping['票号']] || '', // 票号
           originalRow[columnMapping['机票状态']] || '', // 机票状态 -> 订单状态
           originalRow[columnMapping['预订人']] || '', // 预订人
@@ -1227,12 +1414,14 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
 
     // 添加排序后的数据行和分组小计
     let currentRowNumber = 4; // 数据从第4行开始
+
     Object.keys(groupedByPassenger).forEach(passengerName => {
       const passengerData = groupedByPassenger[passengerName];
 
       // 添加该乘客的所有数据行
       passengerData.forEach(item => {
         const newRow = worksheet.addRow(item.processedRow);
+        worksheet.getRow(newRow.number).height = 30;
 
         // 设置销售总价公式（第16列）
         const salesTotalCell = newRow.getCell(16);
@@ -1257,27 +1446,56 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
         const endRow = currentRowNumber - 1;
 
         const subtotalRow = worksheet.addRow([
-          '', '', '', '', // 动支号、票号、机票状态、预订人留空
-          '小计', // 旅客姓名列只显示"小计"
-          '', '', '', '', // 旅客直属部门、行程、航班号、起飞时间留空
-          '', '', '', '', '', '', // 票销售价到退票费留空
-          '', // 销售总价留空
-          '', // 企业支付留空
-          '', // 服务费留空
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', // 前18列全部留空，将合并显示"小计"
           { // 应还款总金额（第19列）设置求和公式
             formula: `=SUM(S${startRow}:S${endRow})`,
             result: 0
           },
-          '' // 签字确认留空
+          '' // 签字确认留空（第20列）
         ]);
+        worksheet.getRow(subtotalRow.number).height = 30;
+
+        // 合并小计行的第1列到第18列，用于显示"小计"文字
+        worksheet.mergeCells(subtotalRow.number, 1, subtotalRow.number, 18);
 
         // 设置小计行样式
         subtotalRow.font = { bold: true };
-        subtotalRow.getCell(5).alignment = { horizontal: 'right' }; // 小计文字右对齐
+        subtotalRow.getCell(1).value = '小计'; // 在合并后的第一个单元格中设置"小计"文字
+        subtotalRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' }; // 小计文字右对齐垂直居中
         subtotalRow.getCell(19).numFmt = '#,##0.00'; // 设置应还款总金额的数字格式
 
         currentRowNumber++;
       }
+    });
+
+    // 在所有数据行添加完成后，需要记录每个分组的数据行范围，以便后续合并动支号列
+    console.log('准备合并动支号列，当前行数:', currentRowNumber);
+
+    // 记录每个分组的起始行和结束行
+    const passengerGroups: Array<{ startRow: number, endRow: number, passengerName: string }> = [];
+    let tempRowNumber = 4; // 重置临时行号计数器
+
+    Object.keys(groupedByPassenger).forEach(passengerName => {
+      const passengerData = groupedByPassenger[passengerName];
+      const startRow = tempRowNumber;
+      const endRow = tempRowNumber + passengerData.length - 1;
+
+      if (passengerData.length > 1) { // 只有多行数据时才合并动支号
+        passengerGroups.push({ startRow, endRow, passengerName });
+        console.log(`乘客 ${passengerName}: 行 ${startRow} 到 ${endRow}`);
+      }
+
+      tempRowNumber += passengerData.length + 1; // +1 是因为每个乘客后面都有一个小计行
+    });
+
+    // 合并每个乘客分组内第1列（动支号列）的单元格
+    passengerGroups.forEach(group => {
+      worksheet.mergeCells(group.startRow, 1, group.endRow, 1);
+      console.log(`合并乘客 ${group.passengerName} 的动支号列：第${group.startRow}行到第${group.endRow}行`);
+
+      // 设置合并后的单元格样式
+      const mergedCell = worksheet.getCell(group.startRow, 1);
+      mergedCell.alignment = { horizontal: 'center', vertical: 'middle' };
     });
 
     // 添加总计行
@@ -1325,15 +1543,19 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
         result: 0
       },
       { // 应还款总金额（第19列）对小计行求和
-        formula: `=SUMIF(E${totalStartRow}:E${totalEndRow},"小计",S${totalStartRow}:S${totalEndRow})`,
+        formula: `=SUMIF(A${totalStartRow}:A${totalEndRow},"小计",S${totalStartRow}:S${totalEndRow})`,
         result: 0
       },
       '' // 签字确认留空
     ]);
+    worksheet.getRow(totalRow.number).height = 30;
 
     // 设置总计行样式
     totalRow.font = { bold: true };
     totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
+
+    // 合并总计行的第1列到第9列
+    worksheet.mergeCells(totalRow.number, 1, totalRow.number, 9);
 
     // 设置总计行的数字格式
     totalRow.getCell(10).numFmt = '#,##0.00'; // 票销售价
@@ -1353,7 +1575,8 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
     ]);
 
     // 设置签名行样式
-    signatureRow.font = { bold: true };
+    signatureRow.alignment = { vertical: 'middle' }; // 签名行垂直居中
+    worksheet.getRow(signatureRow.number).height = 66; // 签名行高度设置为66磅
 
     // 合并单元格用于签名信息
     worksheet.mergeCells(signatureRow.number, 2, signatureRow.number, 4); // 合并B-D列（第2-4列）经办人
@@ -1361,10 +1584,40 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
     worksheet.mergeCells(signatureRow.number, 8, signatureRow.number, 10); // 合并H-J列（第8-10列）日期
     worksheet.mergeCells(signatureRow.number, 11, signatureRow.number, 13); // 合并K-M列（第11-13列）部门负责人审批
 
-    // 设置列宽
-    for (let i = 1; i <= 20; i++) {
-      worksheet.getColumn(i).width = 15;
+    // 设置第四行到总计行的样式（跳过第3行表头）
+    for (let i = 4; i <= totalRow.number; i++) {
+      const row = worksheet.getRow(i);
+
+      // 检查是否是小计行，如果是则设置行高为30磅
+      const cell = row.getCell(1); // 第1列是小计标识列
+      if (cell.value && cell.value.toString() === '小计') {
+        row.height = 30;
+      }
+
+      // 设置每个单元格的样式
+      for (let j = 1; j <= 20; j++) {
+        const cell = row.getCell(j);
+
+        // 如果是小计行的第一个单元格，保持原有的右对齐设置
+        const isSubtotalRow = cell.value && cell.value.toString() === '小计';
+
+        if (!isSubtotalRow) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+
+        cell.font = { size: 10 };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      }
     }
+
+    // 收集所有数据行用于智能列宽计算
+    const allFlightData = processedAllData.map(item => item.processedRow);
+    setSmartColumnWidths(worksheet, headers, allFlightData, 'flight');
 
     // 设置金额列的数字格式（千分号和两位小数）
     worksheet.getColumn(10).numFmt = '#,##0.00'; // 票销售价
@@ -1381,10 +1634,10 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
     const totalRows = flightData.reduce((sum, { data }) => sum + data.length, 0);
 
     // 生成文件
-    const fileName = `${fullDepartmentName}.xlsx`;
+    const fileName = `${worksheetName}.xlsx`;
     generatedFiles.value.push({
       fileName,
-      departmentName: fullDepartmentName,
+      departmentName: worksheetName,
       rowCount: totalRows,
       workbook: newWorkbook
     });
@@ -1416,22 +1669,43 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
 
     // 第一行：标题
     const titleRow = worksheet.addRow([`华安保险${year}年${month}月酒店对账单`]);
-    titleRow.font = { bold: true, size: 16 };
-    titleRow.alignment = { horizontal: 'center' };
-    worksheet.mergeCells(1, 1, 1, 18);
+    titleRow.font = { bold: true, size: 22, name: '微软雅黑' };
+    titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
+    worksheet.mergeCells(1, 1, 1, 16);
+    worksheet.getRow(1).height = 53;
 
     // 第二行：部门信息
     const deptRow = worksheet.addRow([`部门：${departmentName}`]);
-    deptRow.font = { bold: true };
-    worksheet.mergeCells(2, 1, 2, 18);
+    deptRow.font = { bold: true, size: 12 };
+    deptRow.alignment = { vertical: 'middle' };
+    worksheet.mergeCells(2, 1, 2, 16);
+    worksheet.getRow(2).height = 30;
 
     // 第三行：酒店表头
     const hotelHeaders = [
       '预订/退款日期', '订单状态', '预订人', '旅客姓名', '旅客直属部门', '入住日期', '离店日期', '入住城市',
-      '酒店名称', '间夜数', '平均客房单价', '销售总价', '企业支付', '服务费', '应还款总金额', '酒店开票类型', '备注'
+      '酒店名称', '间夜数', '平均客房单价', '销售总价', '企业支付', '服务费', '应还款总金额', '酒店开票类型'
     ];
     const headerRow = worksheet.addRow(hotelHeaders);
-    headerRow.font = { bold: true };
+    headerRow.font = { bold: true, color: { argb: 'FFFFFF' } }; // 白色字体
+    headerRow.alignment = { horizontal: 'center', vertical: 'middle' }; // 居中对齐
+    worksheet.getRow(3).height = 30;
+
+    // 设置表头行的填充颜色和边框
+    for (let i = 1; i <= 16; i++) {
+      const cell = headerRow.getCell(i);
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFF8E22' } // #FF8E22 橙色
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+    }
 
     // 处理酒店数据
     const processedHotelData = hotelData.map((originalRow, rowIndex) => {
@@ -1526,8 +1800,7 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
           '', // 企业支付 - 留空
           totalServiceFee, // 服务费 = 系统使用费 + 酒店托管费 + 代购费
           '', // 应还款总金额 - 留空
-          '专票', // 酒店开票类型 - 写死专票
-          '' // 备注 - 留空
+          '专票' // 酒店开票类型 - 写死专票
         ],
         passengerName: originalRow[columnMapping['入住人']] || '',
         checkInDate: originalRow[columnMapping['入住日期']] || '',
@@ -1566,6 +1839,7 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
       // 添加该乘客的所有数据行
       passengerData.forEach(item => {
         const newRow = worksheet.addRow(item.processedRow);
+        worksheet.getRow(newRow.number).height = 30;
 
         // 设置销售总价公式（第12列）= 平均客房单价 × 间夜数
         const salesTotalCell = newRow.getCell(12);
@@ -1597,25 +1871,21 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
         const endRow = currentRowNumber - 1;
 
         const subtotalRow = worksheet.addRow([
-          '', '', '', '', // 预订/退款日期、订单状态、预订人、旅客姓名留空
-          '小计', // 旅客直属部门列显示"小计"
-          '', '', '', '', // 入住日期、离店日期、入住城市、酒店名称留空
-          '', // 间夜数（第10列）留空
-          '', // 平均客房单价（第11列）留空
-          '', // 销售总价（第12列）留空
-          '', // 企业支付（第13列）留空
-          '', // 服务费（第14列）留空
+          '', '', '', '', '', '', '', '', '', '', '', '', '', '', // 前14列全部留空，将合并显示"小计"
           { // 应还款总金额（第15列）设置求和公式
             formula: `=SUM(O${startRow}:O${endRow})`,
             result: 0
           },
-          '', // 酒店开票类型留空
-          '' // 备注留空
+          '' // 酒店开票类型留空（第16列）
         ]);
+
+        // 合并小计行的第1列到第14列，用于显示"小计"文字
+        worksheet.mergeCells(subtotalRow.number, 1, subtotalRow.number, 14);
 
         // 设置小计行样式
         subtotalRow.font = { bold: true };
-        subtotalRow.getCell(5).alignment = { horizontal: 'right' }; // 小计文字右对齐
+        subtotalRow.getCell(1).value = '小计'; // 在合并后的第一个单元格中设置"小计"文字
+        subtotalRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' }; // 小计文字右对齐垂直居中
         subtotalRow.getCell(15).numFmt = '#,##0.00'; // 应还款总金额数字格式
 
         currentRowNumber++;
@@ -1651,16 +1921,19 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
         result: 0
       },
       { // 应还款总金额（第15列）对小计行求和
-        formula: `=SUMIF(E${totalStartRow}:E${totalEndRow},"小计",O${totalStartRow}:O${totalEndRow})`,
+        formula: `=SUMIF(A${totalStartRow}:A${totalEndRow},"小计",O${totalStartRow}:O${totalEndRow})`,
         result: 0
       },
-      '', // 酒店开票类型留空
-      '' // 备注留空
+      '' // 酒店开票类型留空
     ]);
+    worksheet.getRow(totalRow.number).height = 30;
 
     // 设置总计行样式
     totalRow.font = { bold: true };
     totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
+
+    // 合并总计行的第1列到第9列
+    worksheet.mergeCells(totalRow.number, 1, totalRow.number, 9);
 
     // 设置总计行的数字格式
     totalRow.getCell(10).numFmt = '#,##0.00'; // 间夜数
@@ -1676,7 +1949,8 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
     ]);
 
     // 设置签名行样式
-    signatureRow.font = { bold: true };
+    signatureRow.alignment = { vertical: 'middle' }; // 签名行垂直居中
+    worksheet.getRow(signatureRow.number).height = 66; // 签名行高度设置为66磅
 
     // 合并单元格用于签名信息
     worksheet.mergeCells(signatureRow.number, 2, signatureRow.number, 4); // 合并B-D列（第2-4列）经办人
@@ -1684,10 +1958,58 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
     worksheet.mergeCells(signatureRow.number, 8, signatureRow.number, 10); // 合并H-J列（第8-10列）日期
     worksheet.mergeCells(signatureRow.number, 11, signatureRow.number, 13); // 合并K-M列（第11-13列）部门负责人审批
 
-    // 设置列宽
-    for (let i = 1; i <= 18; i++) {
-      worksheet.getColumn(i).width = 15;
+    // 设置第四行到总计行的样式（跳过第3行表头）
+    for (let i = 4; i <= totalRow.number; i++) {
+      const row = worksheet.getRow(i);
+
+      // 检查是否是小计行，如果是则设置行高为30磅
+      const cell = row.getCell(1); // 第1列是小计标识列
+      if (cell.value && cell.value.toString() === '小计') {
+        row.height = 30;
+      }
+
+      // 设置每个单元格的样式
+      for (let j = 1; j <= 16; j++) {
+        const cell = row.getCell(j);
+
+        // 如果是小计行的第一个单元格，保持原有的右对齐设置
+        const isSubtotalRow = cell.value && cell.value.toString() === '小计';
+
+        if (!isSubtotalRow) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+
+        cell.font = { size: 10 };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      }
     }
+
+    // 收集所有数据行用于智能列宽计算
+    const allHotelData = hotelData.map(row => [
+      row[columnMapping['预订/退款日期']] || '',
+      row[columnMapping['订单状态']] || '',
+      row[columnMapping['预订人']] || '',
+      row[columnMapping['旅客姓名']] || '',
+      row[columnMapping['旅客直属部门']] || '',
+      row[columnMapping['入住日期']] || '',
+      row[columnMapping['离店日期']] || '',
+      row[columnMapping['入住城市']] || '',
+      row[columnMapping['酒店名称']] || '',
+      row[columnMapping['间夜数']] || 0,
+      row[columnMapping['平均客房单价']] || 0,
+      row[columnMapping['销售总价']] || 0,
+      row[columnMapping['企业支付']] || 0,
+      row[columnMapping['服务费']] || 0,
+      row[columnMapping['应还款总金额']] || 0,
+      row[columnMapping['酒店开票类型']] || ''
+    ]);
+
+    setSmartColumnWidths(worksheet, hotelHeaders, allHotelData, 'hotel');
 
     // 设置金额列的数字格式
     worksheet.getColumn(10).numFmt = '#,##0.00'; // 间夜数
@@ -1740,7 +2062,7 @@ const generateExcelFiles = async () => {
       }
     }
 
-  
+
     // 生成ZIP文件
     const zipContent = await zip.generateAsync({ type: "blob" });
     const zipFileName = `华安保险处理结果_${new Date().toISOString().slice(0, 10)}.zip`;
