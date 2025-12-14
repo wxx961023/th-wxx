@@ -135,6 +135,9 @@ const setSmartColumnWidths = (worksheet: any, headers: string[], data: any[] = [
 
     // 需要更大宽度系数的特殊列
     const extraWideColumns = ['出发时间'];
+
+    // 销售总价和企业支付列需要更大的宽度以确保数字完全显示
+    const amountColumns = ['销售总价', '企业支付'];
     // 火车票表格的行程列需要特别大的宽度
     if (tableType === 'train' && header === '行程') {
       columnWidth *= 2.5; // 火车票行程列增加150%的宽度
@@ -142,6 +145,9 @@ const setSmartColumnWidths = (worksheet: any, headers: string[], data: any[] = [
     } else if (extraWideColumns.includes(header)) {
       columnWidth *= 1.8; // 为这些列增加80%的宽度
       console.log(`第${columnNumber}列"${header}"是需要大宽度的列，增加80%宽度，基础宽度：${columnWidth / 1.8}，最终宽度：${columnWidth}`);
+    } else if (amountColumns.includes(header)) {
+      columnWidth *= 1.6; // 为销售总价和企业支付列增加60%的宽度，确保数字完全显示
+      console.log(`第${columnNumber}列"${header}"是金额列，增加60%宽度，基础宽度：${columnWidth / 1.6}，最终宽度：${columnWidth}`);
     } else if (specialColumns.includes(header)) {
       columnWidth *= 1.3; // 为其他特殊列增加30%的宽度
       console.log(`第${columnNumber}列"${header}"是特殊列，增加30%宽度，基础宽度：${columnWidth / 1.3}，最终宽度：${columnWidth}`);
@@ -151,6 +157,11 @@ const setSmartColumnWidths = (worksheet: any, headers: string[], data: any[] = [
 
     // 设置最小宽度
     columnWidth = Math.max(columnWidth, 8);
+
+    // 为销售总价和企业支付列设置更大的最小宽度，确保数字完全显示
+    if (amountColumns.includes(header)) {
+      columnWidth = Math.max(columnWidth, 15); // 金额列最小宽度为15
+    }
 
     worksheet.getColumn(columnNumber).width = columnWidth;
     console.log(`第${columnNumber}列"${header}": 最长内容${maxLength}字符, 设置宽度${columnWidth.toFixed(1)}`);
@@ -416,6 +427,19 @@ const processDepartureTime = (date: any, time: any): string => {
   return `${dateStr} ${timeStr}`;
 };
 
+// 处理起飞时间，只保留/前面的时间
+const processDepartureTimeForFlight = (departureTime: string): string => {
+  if (!departureTime) return '';
+
+  // 如果包含/，只取前面的部分
+  const slashIndex = departureTime.indexOf('/');
+  if (slashIndex !== -1) {
+    return departureTime.substring(0, slashIndex).trim();
+  }
+
+  return departureTime.trim();
+};
+
 // 转换英文姓名为中文姓名
 const convertEnglishNameToChinese = (englishName: string): string => {
   if (!englishName) return '';
@@ -427,7 +451,14 @@ const convertEnglishNameToChinese = (englishName: string): string => {
   };
 
   const upperName = englishName.toString().trim().toUpperCase();
-  return nameMap[upperName] || englishName;
+  const result = nameMap[upperName] || englishName;
+
+  // 添加调试日志
+  if (englishName && upperName.includes('LI')) {
+    console.log(`英文名转换调试: 原始="${englishName}" -> 转换后="${upperName}" -> 结果="${result}"`);
+  }
+
+  return result;
 };
 
 
@@ -969,7 +1000,7 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
 
     // 第一行：标题
     const titleRow = worksheet.addRow([`华安保险${year}年${month}月火车对账单`]);
-    titleRow.font = { bold: true, size: 22, name: '微软雅黑' };
+    titleRow.font = { bold: false, size: 22, name: '微软雅黑' };
     titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.mergeCells(1, 1, 1, 17);
     worksheet.getRow(1).height = 53;
@@ -1124,26 +1155,74 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
     const totalStartRow = 4; // 数据开始行
     const totalEndRow = currentRowNumber - 1; // 最后一行数据（包括小计行）
 
-    const totalRow = worksheet.addRow([
-      '', '', '', '', // 预订/退款日期、订单状态、预订人、旅客姓名留空
-      '', // 旅客直属部门留空
-      '', '', '', '', // 行程、车次、出发时间、坐席留空
-      '', '', '', '', '', '', // 座位编号、车票单价、改签费、退票费、销售总价、企业支付留空
-      '', // 服务费留空
-      { // 应还款总金额（第17列）对小计行求和
-        formula: `=SUMIF(A${totalStartRow}:A${totalEndRow},"小计",Q${totalStartRow}:Q${totalEndRow})`,
-        result: 0
+    // 添加总计行 - 使用全新的方法
+    const totalRowValues = new Array(17).fill(null);
+
+    // 设置公式
+    const formulaColumns = [
+      10, 11, 12, 13, 14, 15, 16  // 对应 K, L, M, N, O, P, Q 列
+    ];
+
+    formulaColumns.forEach((colIndex, i) => {
+      if (i < 6) { // 前6列用SUM
+        const colLetter = String.fromCharCode(75 + i); // K, L, M, N, O, P
+        totalRowValues[colIndex] = {
+          formula: `SUM(${colLetter}${totalStartRow}:${colLetter}${totalEndRow})`
+        };
+      } else { // 最后一列用SUMIF
+        totalRowValues[colIndex] = {
+          formula: `SUMIF(A${totalStartRow}:A${totalEndRow},"小计",Q${totalStartRow}:Q${totalEndRow})`
+        };
       }
-    ]);
+    });
+
+    const totalRow = worksheet.addRow(totalRowValues);
     worksheet.getRow(totalRow.number).height = 30;
 
-    // 设置总计行样式
-    totalRow.font = { bold: true };
-    totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
-    totalRow.getCell(17).numFmt = '#,##0.00'; // 应还款总金额数字格式
+    // 合并总计行的第1列到第10列（到座位编号列），为金额列留出空间
+    worksheet.mergeCells(totalRow.number, 1, totalRow.number, 10);
 
-    // 合并总计行的第1列到第16列
-    worksheet.mergeCells(totalRow.number, 1, totalRow.number, 16);
+    // 使用全新的方法设置总计行的样式
+    setTimeout(() => {
+      const totalRowNum = totalRow.number;
+
+      // 为总计行的每个金额列单独设置样式
+      const columns = ['K', 'L', 'M', 'N', 'O', 'P', 'Q'];
+      columns.forEach(col => {
+        const cell = worksheet.getCell(`${col}${totalRowNum}`);
+
+        // 先设置数字格式
+        cell.numFmt = '#,##0.00';
+
+        // 使用最直接的方式设置字体
+        cell.font = {
+          name: '宋体',
+          family: 2,
+          size: 10,
+          bold: true,
+          color: { argb: 'FF000000' }
+        };
+
+        // 强制重新应用样式
+        cell.style = {
+          ...cell.style,
+          font: cell.font,
+          numFmt: cell.numFmt
+        };
+      });
+
+      // 总计行第一列不显示文字，保持空白
+      const firstCell = worksheet.getCell(`A${totalRowNum}`);
+      firstCell.value = '';
+
+      // 为所有金额列设置对齐方式（不设置背景色）
+      columns.forEach(col => {
+        const cell = worksheet.getCell(`${col}${totalRowNum}`);
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+
+      console.log('总计行样式已应用，行号:', totalRowNum);
+    }, 100);
 
     // 添加签名行（最后一行的下一行）
     const signatureRow = worksheet.addRow([
@@ -1218,6 +1297,8 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
     worksheet.getColumn(11).numFmt = '#,##0.00'; // 车票单价
     worksheet.getColumn(12).numFmt = '#,##0.00'; // 改签费
     worksheet.getColumn(13).numFmt = '#,##0.00'; // 退票费
+    worksheet.getColumn(14).numFmt = '#,##0.00'; // 销售总价（N列）
+    worksheet.getColumn(15).numFmt = '#,##0.00'; // 企业支付（O列）
     worksheet.getColumn(16).numFmt = '#,##0.00'; // 服务费
     worksheet.getColumn(17).numFmt = '#,##0.00'; // 应还款总金额
 
@@ -1269,7 +1350,7 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
 
     // 第一行：标题
     const titleRow = worksheet.addRow([`华安保险${year}年${month}月机票对账单`]);
-    titleRow.font = { bold: true, size: 22, name: '微软雅黑' };
+    titleRow.font = { bold: false, size: 22, name: '微软雅黑' };
     titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.mergeCells(1, 1, 1, 20);
     worksheet.getRow(1).height = 53;
@@ -1323,7 +1404,7 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
         processedItinerary = originalItinerary; // 国际机票航程直接使用
 
         const originalDepartureTime = originalRow[columnMapping['出发时间']] || '';
-        processedDepartureTime = originalDepartureTime; // 国际机票直接使用出发时间
+        processedDepartureTime = processDepartureTimeForFlight(originalDepartureTime); // 处理起飞时间，只保留/前面的部分
 
         // 转换英文姓名为中文姓名
         const originalPassengerName = originalRow[columnMapping['旅客姓名']] || '';
@@ -1335,10 +1416,17 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
 
         const departureDate = originalRow[columnMapping['出发日期']] || '';
         const departureTime = originalRow[columnMapping['出发时间']] || '';
-        processedDepartureTime = processDepartureTime(departureDate, departureTime);
 
-        // 国内机票直接使用原姓名
-        processedPassengerName = originalRow[columnMapping['旅客姓名']] || '';
+        // 如果出发时间包含/，使用新的处理函数；否则使用原来的处理逻辑
+        if (departureTime.includes('/')) {
+          processedDepartureTime = processDepartureTimeForFlight(departureTime);
+        } else {
+          processedDepartureTime = processDepartureTime(departureDate, departureTime);
+        }
+
+        // 国内机票也转换英文姓名为中文姓名
+        const originalPassengerName = originalRow[columnMapping['旅客姓名']] || '';
+        processedPassengerName = convertEnglishNameToChinese(originalPassengerName);
       }
 
       // 动支号列都是空的，直接设置为空字符串
@@ -1550,24 +1638,48 @@ const generateFlightDepartmentReport = async (departmentName: string, flightData
     ]);
     worksheet.getRow(totalRow.number).height = 30;
 
-    // 设置总计行样式
-    totalRow.font = { bold: true };
-    totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
-
     // 合并总计行的第1列到第9列
     worksheet.mergeCells(totalRow.number, 1, totalRow.number, 9);
 
-    // 设置总计行的数字格式
-    totalRow.getCell(10).numFmt = '#,##0.00'; // 票销售价
-    totalRow.getCell(11).numFmt = '#,##0.00'; // 机建费(国内)
-    totalRow.getCell(12).numFmt = '#,##0.00'; // 燃油费(国内)
-    totalRow.getCell(13).numFmt = '#,##0.00'; // 改签费
-    totalRow.getCell(14).numFmt = '#,##0.00'; // 升舱费
-    totalRow.getCell(15).numFmt = '#,##0.00'; // 退票费
-    totalRow.getCell(16).numFmt = '#,##0.00'; // 销售总价
-    totalRow.getCell(17).numFmt = '#,##0.00'; // 企业支付
-    totalRow.getCell(18).numFmt = '#,##0.00'; // 服务费
-    totalRow.getCell(19).numFmt = '#,##0.00'; // 应还款总金额
+    // 使用全新的方法设置机票表总计行的样式
+    setTimeout(() => {
+      const totalRowNum = totalRow.number;
+      const startCol = 10; // J列
+      const endCol = 19;   // S列
+
+      // 为总计行的每个金额列单独设置样式
+      for (let col = startCol; col <= endCol; col++) {
+        const cell = totalRow.getCell(col);
+
+        // 先设置数字格式
+        cell.numFmt = '#,##0.00';
+
+        // 使用最直接的方式设置字体
+        cell.font = {
+          name: '宋体',
+          family: 2,
+          size: 10,
+          bold: true,
+          color: { argb: 'FF000000' }
+        };
+
+        // 强制重新应用样式
+        cell.style = {
+          ...cell.style,
+          font: cell.font,
+          numFmt: cell.numFmt
+        };
+
+        // 设置对齐方式（不设置背景色）
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+
+      // 总计行第一列不显示文字，保持空白
+      const firstCell = totalRow.getCell(1);
+      firstCell.value = '';
+
+      console.log('机票表总计行样式已应用，行号:', totalRowNum);
+    }, 100);
 
     // 添加签名行（最后一行的下一行）
     const signatureRow = worksheet.addRow([
@@ -1669,7 +1781,7 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
 
     // 第一行：标题
     const titleRow = worksheet.addRow([`华安保险${year}年${month}月酒店对账单`]);
-    titleRow.font = { bold: true, size: 22, name: '微软雅黑' };
+    titleRow.font = { bold: false, size: 22, name: '微软雅黑' };
     titleRow.alignment = { horizontal: 'center', vertical: 'middle' };
     worksheet.mergeCells(1, 1, 1, 16);
     worksheet.getRow(1).height = 53;
@@ -1928,13 +2040,6 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
     ]);
     worksheet.getRow(totalRow.number).height = 30;
 
-    // 设置总计行样式
-    totalRow.font = { bold: true };
-    totalRow.getCell(5).alignment = { horizontal: 'right' }; // 总计文字右对齐
-
-    // 合并总计行的第1列到第9列
-    worksheet.mergeCells(totalRow.number, 1, totalRow.number, 9);
-
     // 设置总计行的数字格式
     totalRow.getCell(10).numFmt = '#,##0.00'; // 间夜数
     totalRow.getCell(11).numFmt = '#,##0.00'; // 平均客房单价
@@ -1942,6 +2047,59 @@ const generateHotelDepartmentReport = async (departmentName: string, hotelData: 
     totalRow.getCell(13).numFmt = '#,##0.00'; // 企业支付
     totalRow.getCell(14).numFmt = '#,##0.00'; // 服务费
     totalRow.getCell(15).numFmt = '#,##0.00'; // 应还款总金额
+
+    // 为所有金额列的单元格设置加粗样式 - 使用更明确的字体设置
+    for (let col = 10; col <= 15; col++) {
+      const cell = totalRow.getCell(col);
+      cell.font = {
+        name: '微软雅黑',
+        size: 10,
+        bold: true
+      };
+    }
+
+    // 合并总计行的第1列到第9列
+    worksheet.mergeCells(totalRow.number, 1, totalRow.number, 9);
+
+    // 使用全新的方法设置酒店表总计行的样式
+    setTimeout(() => {
+      const totalRowNum = totalRow.number;
+      const startCol = 10; // J列
+      const endCol = 15;   // O列
+
+      // 为总计行的每个金额列单独设置样式
+      for (let col = startCol; col <= endCol; col++) {
+        const cell = totalRow.getCell(col);
+
+        // 先设置数字格式
+        cell.numFmt = '#,##0.00';
+
+        // 使用最直接的方式设置字体
+        cell.font = {
+          name: '宋体',
+          family: 2,
+          size: 10,
+          bold: true,
+          color: { argb: 'FF000000' }
+        };
+
+        // 强制重新应用样式
+        cell.style = {
+          ...cell.style,
+          font: cell.font,
+          numFmt: cell.numFmt
+        };
+
+        // 设置对齐方式（不设置背景色）
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+
+      // 总计行第一列不显示文字，保持空白
+      const firstCell = totalRow.getCell(1);
+      firstCell.value = '';
+
+      console.log('酒店表总计行样式已应用，行号:', totalRowNum);
+    }, 100);
 
     // 添加签名行（最后一行的下一行）
     const signatureRow = worksheet.addRow([
