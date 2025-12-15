@@ -46,6 +46,7 @@ export const ABSEN_DEPARTMENT_TO_CONTACT_MAP: Record<string, {
   "印度市场": { accountant: "袁文静", email: "joyce.yuan@absen.com" },
   "印尼市场": { accountant: "袁文静", email: "joyce.yuan@absen.com" },
   "亚太二地区部管理": { accountant: "袁文静", email: "joyce.yuan@absen.com" },
+  "马来西亚市场": { accountant: "袁文静", email: "joyce.yuan@absen.com" },
   "俄罗斯市场": { accountant: "胡晶", email: "jing.hu@absen.com" },
   "俄语市场": { accountant: "胡晶", email: "jing.hu@absen.com" },
   "亚太三地区部管理": { accountant: "胡晶", email: "jing.hu@absen.com" },
