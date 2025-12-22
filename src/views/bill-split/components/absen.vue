@@ -510,7 +510,28 @@ const processAccountantInfo = async () => {
       console.log(`工作表 ${sheetName} 处理完成: 处理 ${sheetProcessed} 行，${sheetYellowCells} 行未找到对账人`);
       totalProcessed += sheetProcessed;
 
-      // 样式已经在数据填充时设置，无需单独处理
+      // 设置该工作表的字体和行高样式
+      // 设置表头样式
+      const styleHeaderRow = worksheet.getRow(1);
+      styleHeaderRow.height = 22;
+      styleHeaderRow.eachCell((cell) => {
+        if (cell.value !== null && cell.value !== undefined) {
+          cell.font = { size: 10, bold: true, name: '宋体' };
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        }
+      });
+
+      // 设置数据行样式
+      for (let rowNum = 2; rowNum <= worksheet.rowCount; rowNum++) {
+        const styleDataRow = worksheet.getRow(rowNum);
+        styleDataRow.height = 22;
+        styleDataRow.eachCell((cell) => {
+          if (cell.value !== null && cell.value !== undefined) {
+            cell.font = { size: 10, name: '宋体' };
+            cell.alignment = { vertical: 'middle' };
+          }
+        });
+      }
     }
 
     // 直接下载处理后的Excel文件
@@ -836,8 +857,8 @@ const generateExcelFiles = async () => {
       }
 
       // 创建新的工作簿
-
       const newWorkbook = new ExcelJS.Workbook();
+
       let totalRows = 0;
 
       // 为每个工作表创建数据表
@@ -848,19 +869,36 @@ const generateExcelFiles = async () => {
         const sourceWorksheet = sourceWorkbook.getWorksheet(sheetData.sheetName);
         const sourceHeaderRow = sourceWorksheet!.getRow(1);
 
+        // 创建表头行并设置样式
         const newHeaderRow = newWorksheet.getRow(1);
-        sourceHeaderRow.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
-          newHeaderRow.getCell(colNumber).value = cell.value;
-          newHeaderRow.getCell(colNumber).font = { bold: true };
+        newHeaderRow.height = 22;
+
+        // 先复制表头数据，然后立即设置样式
+        const headerData: any[] = [];
+        sourceHeaderRow.eachCell({ includeEmpty: true }, (cell: any) => {
+          headerData.push(cell.value);
         });
 
-        // 复制数据行
+        // 设置表头单元格并应用样式
+        for (let col = 0; col < headerData.length; col++) {
+          const cell = newHeaderRow.getCell(col + 1);
+          cell.value = headerData[col];
+          cell.font = { size: 10, bold: true, name: '宋体' }; // 直接设置
+          cell.alignment = { vertical: 'middle', horizontal: 'center' };
+        }
+
+        // 复制数据行并应用样式
         for (let i = 0; i < sheetData.rows.length; i++) {
           const rowData = sheetData.rows[i];
           const newRow = newWorksheet.getRow(i + 2);
+          newRow.height = 22;
 
+          // 设置数据并应用样式
           for (let j = 0; j < rowData.length; j++) {
-            newRow.getCell(j + 1).value = rowData[j];
+            const cell = newRow.getCell(j + 1);
+            cell.value = rowData[j];
+            cell.font = { size: 10, name: '宋体' }; // 直接设置
+            cell.alignment = { vertical: 'middle' };
           }
         }
 
@@ -869,9 +907,58 @@ const generateExcelFiles = async () => {
           column.width = 15;
         });
 
+        // 强制提交工作表更改
+        newWorksheet.model.rows.forEach((rowModel: any) => {
+          if (rowModel) {
+            if (!rowModel.ht || rowModel.ht !== 22) {
+              rowModel.ht = 22; // 行高
+              rowModel.customHeight = true; // 自定义行高标志
+            }
+          }
+        });
+
         // 统计总行数
         totalRows += sheetData.rows.length;
       }
+
+      // 尝试最后的解决方案 - 强制重置所有样式
+      newWorkbook.eachSheet((worksheet) => {
+        console.log(`工作表 ${worksheet.name}: ${worksheet.rowCount} 行, ${worksheet.columnCount} 列`);
+
+        // 清除所有行的默认样式
+        worksheet.eachRow((row, rowNumber) => {
+          // 重置行高
+          row.height = 22;
+
+          // 清除所有单元格样式
+          row.eachCell((cell) => {
+            if (cell.value !== null && cell.value !== undefined) {
+              // 强制设置字体，确保覆盖任何默认设置
+              cell.font = {
+                name: '宋体',
+                size: 10,
+                bold: rowNumber === 1,
+                italic: false,
+                underline: false,
+                color: { argb: 'FF000000' }
+              };
+
+              // 设置对齐
+              cell.alignment = {
+                vertical: 'middle',
+                horizontal: rowNumber === 1 ? 'center' : 'left'
+              };
+
+              // 调试输出
+              if (rowNumber <= 3) {
+                console.log(`行${rowNumber}列${cell.col}: 字体大小=${cell.font.size}, 值=${cell.value}`);
+              }
+            }
+          });
+        });
+      });
+
+      console.log('样式设置完成，准备生成Excel文件...');
 
       // 生成文件并添加到ZIP
       const excelBuffer = await newWorkbook.xlsx.writeBuffer();
