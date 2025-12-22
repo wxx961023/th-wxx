@@ -1032,17 +1032,30 @@ const generateExcelFiles = async () => {
         const newHeaderRow = newWorksheet.getRow(1);
         newHeaderRow.height = 22;
 
+        // 查找总金额列的位置
+        let totalAmountColIndex = -1;
+        sourceHeaderRow.eachCell((cell: any, colNumber: number) => {
+          if (cell.value && cell.value.toString().trim() === "总金额") {
+            totalAmountColIndex = colNumber;
+          }
+        });
+
+        // 确定需要保留的列数（总金额列及之前的列）
+        const colsToKeep = totalAmountColIndex > 0 ? totalAmountColIndex : sourceHeaderRow.cellCount;
+
         // 先复制表头数据，然后立即设置样式
         const headerData: any[] = [];
-        sourceHeaderRow.eachCell({ includeEmpty: true }, (cell: any) => {
-          headerData.push(cell.value);
+        sourceHeaderRow.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
+          if (colNumber <= colsToKeep) {  // 只复制总金额列及之前的列
+            headerData.push(cell.value);
+          }
         });
 
         // 设置表头单元格并应用样式
         for (let col = 0; col < headerData.length; col++) {
           const cell = newHeaderRow.getCell(col + 1);
           cell.value = headerData[col];
-          cell.font = { size: 10, bold: true, name: "宋体" }; // 直接设置
+          cell.font = { size: 10, name: "宋体" }; // 移除粗体
           cell.alignment = { vertical: "middle", horizontal: "center" };
         }
 
@@ -1052,8 +1065,8 @@ const generateExcelFiles = async () => {
           const newRow = newWorksheet.getRow(i + 2);
           newRow.height = 22;
 
-          // 设置数据并应用样式
-          for (let j = 0; j < rowData.length; j++) {
+          // 设置数据并应用样式（只保留总金额列及之前的数据）
+          for (let j = 0; j < Math.min(rowData.length, colsToKeep); j++) {
             const cell = newRow.getCell(j + 1);
             cell.value = rowData[j];
             cell.font = { size: 10, name: "宋体" }; // 直接设置
@@ -1062,9 +1075,9 @@ const generateExcelFiles = async () => {
         }
 
         // 设置列宽
-        newWorksheet.columns.forEach(column => {
-          column.width = 15;
-        });
+        for (let col = 1; col <= colsToKeep; col++) {
+          newWorksheet.getColumn(col).width = 15;
+        }
 
         // 强制提交工作表更改
         (newWorksheet.model as any).rows.forEach((rowModel: any) => {
@@ -1186,15 +1199,27 @@ const generateExcelFiles = async () => {
           // 创建求和公式：从第2行到倒数第二行的总金额列
           const startRow = 2;
           const endRow = totalRowNumber - 1;
-          const columnLetter = String.fromCharCode(64 + totalAmountColumnIndex); // 列号转字母
+
+          // 正确的列号转字母函数
+          const getColumnLetter = (colNum: number): string => {
+            let letters = '';
+            while (colNum > 0) {
+              colNum--;
+              letters = String.fromCharCode(65 + (colNum % 26)) + letters;
+              colNum = Math.floor(colNum / 26);
+            }
+            return letters;
+          };
+
+          const columnLetter = getColumnLetter(totalAmountColumnIndex);
 
           sumCell.value = {
             formula: `SUM(${columnLetter}${startRow}:${columnLetter}${endRow})`,
             result: 0
           };
 
-          sumCell.font = { size: 10, bold: true, name: "宋体" };
-          sumCell.alignment = { vertical: "middle", horizontal: "right" };
+          sumCell.font = { size: 10, name: "宋体" }; // 移除粗体
+          sumCell.alignment = { vertical: "middle", horizontal: "center" };
           sumCell.border = {
             top: { style: "thin", color: { argb: "FF000000" } },
             left: { style: "thin", color: { argb: "FF000000" } },
@@ -1968,17 +1993,30 @@ const downloadAdjustedData = async () => {
         const newHeaderRow = newWorksheet.getRow(1);
         newHeaderRow.height = 22;
 
+        // 查找总金额列的位置
+        let totalAmountColIndex = -1;
+        sourceHeaderRow.eachCell((cell: any, colNumber: number) => {
+          if (cell.value && cell.value.toString().trim() === "总金额") {
+            totalAmountColIndex = colNumber;
+          }
+        });
+
+        // 确定需要保留的列数（总金额列及之前的列）
+        const colsToKeep = totalAmountColIndex > 0 ? totalAmountColIndex : sourceHeaderRow.cellCount;
+
         // 复制表头数据并设置样式
         const headerData: any[] = [];
-        sourceHeaderRow.eachCell({ includeEmpty: true }, (cell: any) => {
-          headerData.push(cell.value);
+        sourceHeaderRow.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
+          if (colNumber <= colsToKeep) {  // 只复制总金额列及之前的列
+            headerData.push(cell.value);
+          }
         });
 
         // 设置表头单元格并应用样式
         for (let col = 0; col < headerData.length; col++) {
           const cell = newHeaderRow.getCell(col + 1);
           cell.value = headerData[col];
-          cell.font = { size: 10, bold: true, name: "宋体" };
+          cell.font = { size: 10, name: "宋体" }; // 移除粗体
           cell.alignment = { vertical: "middle", horizontal: "center" };
           cell.border = {
             top: { style: "thin", color: { argb: "FF000000" } },
@@ -1994,11 +2032,12 @@ const downloadAdjustedData = async () => {
           const newRow = newWorksheet.getRow(i + 2);
           newRow.height = 22;
 
-          for (let j = 0; j < rowData.length; j++) {
+          // 只复制总金额列及之前的数据
+          for (let j = 0; j < Math.min(rowData.length, colsToKeep); j++) {
             const cell = newRow.getCell(j + 1);
             cell.value = rowData[j];
             cell.font = { size: 10, name: "宋体" };
-            cell.alignment = { vertical: "middle" };
+            cell.alignment = { vertical: "middle", horizontal: "center" };
             cell.border = {
               top: { style: "thin", color: { argb: "FF000000" } },
               left: { style: "thin", color: { argb: "FF000000" } },
@@ -2008,10 +2047,10 @@ const downloadAdjustedData = async () => {
           }
         }
 
-        // 设置列宽
-        newWorksheet.columns.forEach(column => {
-          column.width = 15;
-        });
+        // 设置列宽（只设置保留的列）
+        for (let col = 1; col <= colsToKeep; col++) {
+          newWorksheet.getColumn(col).width = 15;
+        }
       }
 
       // 为每个工作表添加合计行
@@ -2058,15 +2097,27 @@ const downloadAdjustedData = async () => {
           const sumCell = totalRow.getCell(totalAmountColumnIndex);
           const startRow = 2;
           const endRow = totalRowNumber - 1;
-          const columnLetter = String.fromCharCode(64 + totalAmountColumnIndex);
+
+          // 正确的列号转字母函数
+          const getColumnLetter = (colNum: number): string => {
+            let letters = '';
+            while (colNum > 0) {
+              colNum--;
+              letters = String.fromCharCode(65 + (colNum % 26)) + letters;
+              colNum = Math.floor(colNum / 26);
+            }
+            return letters;
+          };
+
+          const columnLetter = getColumnLetter(totalAmountColumnIndex);
 
           sumCell.value = {
             formula: `SUM(${columnLetter}${startRow}:${columnLetter}${endRow})`,
             result: 0
           };
 
-          sumCell.font = { size: 10, bold: true, name: "宋体" };
-          sumCell.alignment = { vertical: "middle", horizontal: "right" };
+          sumCell.font = { size: 10, name: "宋体" }; // 移除粗体
+          sumCell.alignment = { vertical: "middle", horizontal: "center" };
           sumCell.border = {
             top: { style: "thin", color: { argb: "FF000000" } },
             left: { style: "thin", color: { argb: "FF000000" } },
