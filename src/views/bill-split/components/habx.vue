@@ -982,6 +982,17 @@ const processDomesticHotels = (workbook: any) => {
 
 // 生成火车票部门报告
 const generateTrainDepartmentReport = async (departmentName: string, trainData: any[], columnMapping: any) => {
+  // 处理贵宾部门名称的特殊逻辑
+  const isVip = departmentName === '贵宾';
+  const displayDepartmentName = isVip ? '无' : departmentName;
+
+  // 对于贵宾部门，需要先获取旅客姓名来动态设置工作表名和文件名
+  let passengerName = '';
+  if (isVip && trainData.length > 0) {
+    passengerName = trainData[0][columnMapping['乘车人']] || '';
+  }
+
+  const worksheetName = isVip ? `商务-火车-${passengerName}` : `商务-火车-${departmentName}`;
   const fullDepartmentName = `商务-火车-${departmentName}`;
 
   try {
@@ -989,7 +1000,7 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
 
     // 创建新的工作簿
     const newWorkbook = new ExcelJS.Workbook();
-    const worksheet = newWorkbook.addWorksheet(fullDepartmentName);
+    const worksheet = newWorkbook.addWorksheet(worksheetName);
 
     // 计算上个月日期
     const now = new Date();
@@ -1006,7 +1017,7 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
     worksheet.getRow(1).height = 53;
 
     // 第二行：部门信息
-    const deptRow = worksheet.addRow([`部门：${departmentName}`]);
+    const deptRow = worksheet.addRow([`部门：${displayDepartmentName}`]);
     deptRow.font = { bold: true, size: 12 };
     deptRow.alignment = { vertical: 'middle' };
     worksheet.mergeCells(2, 1, 2, 17);
@@ -1303,10 +1314,10 @@ const generateTrainDepartmentReport = async (departmentName: string, trainData: 
     worksheet.getColumn(17).numFmt = '#,##0.00'; // 应还款总金额
 
     // 生成文件
-    const fileName = `${fullDepartmentName}.xlsx`;
+    const fileName = `${worksheetName}.xlsx`;
     generatedFiles.value.push({
       fileName,
-      departmentName: fullDepartmentName,
+      departmentName: worksheetName,
       rowCount: trainData.length,
       workbook: newWorkbook
     });
