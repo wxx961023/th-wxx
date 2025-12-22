@@ -443,6 +443,20 @@ const processAccountantInfo = async () => {
           costBelongValue = row.getCell(adjustedCostBelongIndex + 1).value;
         }
 
+        // 检查是否为空行（所有列都是空的）
+        let isEmptyRow = true;
+        row.eachCell({ includeEmpty: false }, (cell: any) => {
+          if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
+            isEmptyRow = false;
+          }
+        });
+
+        // 如果是空行，跳过处理
+        if (isEmptyRow) {
+          console.log(`工作表 ${sheetName} 第 ${rowNumber} 行: 空行，跳过处理`);
+          continue;
+        }
+
         const accountantCell = row.getCell(updatedAccountantIndex + 1);
 
         // 使用新的备用查询逻辑
@@ -462,6 +476,11 @@ const processAccountantInfo = async () => {
           // 填写对账人姓名
           accountantCell.value = contactInfo.accountant;
           accountantCell.font = { bold: false }; // 数据行不加粗
+          // 清除任何现有的填充样式
+          accountantCell.fill = {
+            type: 'pattern',
+            pattern: 'none'
+          };
           console.log(`工作表 ${sheetName} 第 ${rowNumber} 行: 对账人="${contactInfo.accountant}" (来源: ${source})`);
           sheetProcessed++;
         } else {
@@ -654,6 +673,19 @@ const generateExcelFiles = async () => {
 
           const accountantCell = row.getCell(updatedAccountantIndex + 1);
 
+          // 检查是否为空行（所有列都是空的）
+          let isEmptyRow = true;
+          row.eachCell({ includeEmpty: false }, (cell: any) => {
+            if (cell.value !== null && cell.value !== undefined && cell.value !== '') {
+              isEmptyRow = false;
+            }
+          });
+
+          // 如果是空行，跳过处理
+          if (isEmptyRow) {
+            continue;
+          }
+
           // 使用备用查询逻辑
           const { contactInfo } = getContactInfoWithFallback(
             costBelongFullValue,
@@ -665,6 +697,11 @@ const generateExcelFiles = async () => {
           if (contactInfo && contactInfo.accountant) {
             accountantCell.value = contactInfo.accountant;
             accountantCell.font = { bold: false };
+            // 清除任何现有的填充样式
+            accountantCell.fill = {
+              type: 'pattern',
+              pattern: 'none'
+            };
             totalProcessed++;
           } else {
             accountantCell.value = '未找到对账人';
