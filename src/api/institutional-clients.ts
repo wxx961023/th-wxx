@@ -48,6 +48,11 @@ export interface CorpItem {
   hasContractDesc?: string
   contractValidityStatusDesc?: string
   billAmount?: number | string
+  creditAmountText?: string
+  billDayText?: string
+  billDurationText?: string
+  billingPeriodText?: string
+  spName?: string
   // 嵌套的员工数组
   salesStaffs?: Array<{ staffName?: string }>
   customerStaffs?: Array<{ staffName?: string }>

@@ -9,7 +9,14 @@ import {
   Download,
   CaretBottom
 } from "@element-plus/icons-vue";
-import { ElMessage, ElMessageBox, ElForm, ElFormItem, ElInput, ElButton } from "element-plus";
+import {
+  ElMessage,
+  ElMessageBox,
+  ElForm,
+  ElFormItem,
+  ElInput,
+  ElButton
+} from "element-plus";
 import {
   searchCorps,
   type CorpSearchRequest,
@@ -45,7 +52,12 @@ const columns = [
   { prop: "settlementStaffName", label: "结算经理", minWidth: 100 },
   { prop: "hasContractDesc", label: "合同状态", minWidth: 90 },
   { prop: "contractValidityStatusDesc", label: "合同时效", minWidth: 90 },
-  { prop: "billAmount", label: "上期账单", minWidth: 100 }
+  { prop: "creditAmountText", label: "初始授信额度", minWidth: 120 },
+  { prop: "billDayText", label: "账单日", minWidth: 100 },
+  { prop: "billDurationText", label: "账期", minWidth: 100 },
+  { prop: "billingPeriodText", label: "结算方式", minWidth: 100 },
+  { prop: "billAmount", label: "上期账单", minWidth: 100 },
+  { prop: "spName", label: "归属服务商", minWidth: 150 }
 ];
 
 /**
@@ -235,88 +247,79 @@ const showLoginDialog = () => {
     showClose: false,
     hideFooter: true,
     contentRenderer: ({ options, index }) =>
-      h(
-        "div",
-        { style: { padding: "20px 20px 0" } },
-        [
-          h(
-            ElForm,
-            {
-              labelWidth: "70px",
-              style: { maxWidth: "100%" }
-            },
-            () => [
-              h(ElFormItem, { label: "账号" }, () =>
-                h(ElInput, {
-                  modelValue: loginFormData.value.identity,
-                  "onUpdate:modelValue": (val: string) => {
-                    loginFormData.value.identity = val;
-                  },
-                  placeholder: "请输入账号",
-                  clearable: true
-                })
-              ),
-              h(ElFormItem, { label: "密码" }, () =>
-                h(ElInput, {
-                  modelValue: loginFormData.value.password,
-                  "onUpdate:modelValue": (val: string) => {
-                    loginFormData.value.password = val;
-                  },
-                  type: "password",
-                  placeholder: "请输入密码",
-                  showPassword: true,
-                  clearable: true
-                })
-              ),
+      h("div", { style: { padding: "20px 20px 0" } }, [
+        h(
+          ElForm,
+          {
+            labelWidth: "70px",
+            style: { maxWidth: "100%" }
+          },
+          () => [
+            h(ElFormItem, { label: "账号" }, () =>
+              h(ElInput, {
+                modelValue: loginFormData.value.identity,
+                "onUpdate:modelValue": (val: string) => {
+                  loginFormData.value.identity = val;
+                },
+                placeholder: "请输入账号",
+                clearable: true
+              })
+            ),
+            h(ElFormItem, { label: "密码" }, () =>
+              h(ElInput, {
+                modelValue: loginFormData.value.password,
+                "onUpdate:modelValue": (val: string) => {
+                  loginFormData.value.password = val;
+                },
+                type: "password",
+                placeholder: "请输入密码",
+                showPassword: true,
+                clearable: true
+              })
+            ),
+            h(ElFormItem, { style: { marginBottom: "0" } }, () =>
               h(
-                ElFormItem,
-                { style: { marginBottom: "0" } },
-                () =>
-                  h(
-                    ElButton,
-                    {
-                      type: "primary",
-                      loading: loginLoading.value,
-                      style: { width: "100%" },
-                      onClick: async () => {
-                        if (
-                          !loginFormData.value.identity ||
-                          !loginFormData.value.password
-                        ) {
-                          ElMessage.warning("请输入账号和密码");
-                          return;
-                        }
-                        loginLoading.value = true;
-                        try {
-                          const res = await useUserStoreHook().loginByReal({
-                            identity: loginFormData.value.identity,
-                            password: loginFormData.value.password
-                          });
-                          if (res.success) {
-                            ElMessage.success("登录成功");
-                            closeDialog(options, index);
-                            // 重新加载数据
-                            await loadClientData();
-                          } else {
-                            ElMessage.error("登录失败，请检查账号密码");
-                          }
-                        } catch (err: any) {
-                          console.error("登录错误:", err);
-                          ElMessage.error(
-                            `登录失败: ${err.message || "网络错误"}`
-                          );
-                        } finally {
-                          loginLoading.value = false;
-                        }
+                ElButton,
+                {
+                  type: "primary",
+                  loading: loginLoading.value,
+                  style: { width: "100%" },
+                  onClick: async () => {
+                    if (
+                      !loginFormData.value.identity ||
+                      !loginFormData.value.password
+                    ) {
+                      ElMessage.warning("请输入账号和密码");
+                      return;
+                    }
+                    loginLoading.value = true;
+                    try {
+                      const res = await useUserStoreHook().loginByReal({
+                        identity: loginFormData.value.identity,
+                        password: loginFormData.value.password
+                      });
+                      if (res.success) {
+                        ElMessage.success("登录成功");
+                        closeDialog(options, index);
+                        // 重新加载数据
+                        await loadClientData();
+                      } else {
+                        ElMessage.error("登录失败，请检查账号密码");
                       }
-                    },
-                    () => "登录"
-                  )
+                    } catch (err: any) {
+                      console.error("登录错误:", err);
+                      ElMessage.error(`登录失败: ${err.message || "网络错误"}`);
+                    } finally {
+                      loginLoading.value = false;
+                    }
+                  }
+                },
+                () => "登录"
               )
-            ]
-          )
-        ]
-      )
+            )
+          ]
+        )
+      ])
   });
 };
 
@@ -343,7 +346,10 @@ const exportColumns = ref<string[]>([
   "销售经理",
   "结算经理",
   "合同状态",
-  "合同时效"
+  "合同时效",
+  "账单日",
+  "账期",
+  "结算方式"
 ]);
 
 // 所有可选的列定义
@@ -353,13 +359,18 @@ const availableColumns = [
   { key: "settlementStaffName", label: "结算经理" },
   { key: "hasContractDesc", label: "合同状态" },
   { key: "contractValidityStatusDesc", label: "合同时效" },
+  { key: "creditAmountText", label: "初始授信额度" },
+  { key: "billDayText", label: "账单日" },
+  { key: "billDurationText", label: "账期" },
+  { key: "billingPeriodText", label: "结算方式" },
   { key: "businessUnit", label: "客户类型" },
   { key: "location", label: "客户地址" },
   { key: "corpType", label: "所属行业" },
   { key: "createTime", label: "新增日期" },
   { key: "contactName", label: "联系人" },
   { key: "customerStaffName", label: "客服经理" },
-  { key: "billAmount", label: "上期账单" }
+  { key: "billAmount", label: "上期账单" },
+  { key: "spName", label: "归属服务商" }
 ];
 
 // 获取全部数据并导出Excel
@@ -475,6 +486,14 @@ const selectAllColumns = () => {
 const clearAllColumns = () => {
   exportColumns.value = [];
 };
+
+// 表头高亮样式逻辑
+const headerCellClassName = ({ column }: { column: any }) => {
+  if (exportColumns.value.includes(column.label)) {
+    return "highlight-header";
+  }
+  return "";
+};
 </script>
 
 <template>
@@ -525,7 +544,7 @@ const clearAllColumns = () => {
                 collapse-tags-tooltip
                 :max-collapse-tags="10"
                 placeholder="选择导出列"
-                style="width: 540px; margin-left: 8px"
+                style="width: 840px; margin-left: 8px"
                 :disabled="clientList.length === 0"
                 clearable
                 @clear="() => (exportColumns = [])"
@@ -576,6 +595,7 @@ const clearAllColumns = () => {
             stripe
             border
             style="width: 100%"
+            :header-cell-class-name="headerCellClassName"
             @selection-change="handleSelectionChange"
           >
             <!-- 选择列 -->
@@ -710,5 +730,15 @@ const clearAllColumns = () => {
   .search-form .el-form-item {
     margin-bottom: 10px;
   }
+}
+
+:deep(.highlight-header) {
+  background-color: #ecf5ff !important;
+  color: #409eff !important;
+  font-weight: bold;
+}
+
+:deep(.highlight-header .cell) {
+  color: #409eff !important;
 }
 </style>
