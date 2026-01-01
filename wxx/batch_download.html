@@ -790,7 +790,7 @@
         class="form-row"
         style="border-top: 1px solid #ddd; padding-top: 20px; margin-top: 20px"
       >
-        <div class="form-group">
+        <!-- <div class="form-group">
           <label for="excelFile">导入Excel客户列表:</label>
           <input
             type="file"
@@ -808,14 +808,14 @@
               >下载模板</a
             >
           </small>
-        </div>
+        </div> -->
 
-        <div class="form-group">
+        <!-- <div class="form-group">
           <label>&nbsp;</label>
           <button onclick="exportCurrentConfig()">导出当前配置</button>
-        </div>
+        </div> -->
 
-        <div class="form-group">
+        <!-- <div class="form-group">
           <label for="styleExcelFile">Excel样式修改:</label>
           <input
             type="file"
@@ -841,63 +841,44 @@
               样式设置
             </button>
           </small>
-        </div>
+        </div> -->
 
-        <div class="form-group">
-          <label for="zipFile">批量Excel处理 (ZIP文件):</label>
+        <div class="form-group" style="text-align: center; padding: 30px; background: #f8f9fa; border-radius: 8px; border: 1px solid #dee2e6; margin: 20px 0;">
+          <label for="zipFile" style="font-size: 18px; font-weight: 600; color: #333; display: block; margin-bottom: 15px;">
+            批量Excel处理 (ZIP文件)
+          </label>
+
           <input
             type="file"
             id="zipFile"
             accept=".zip"
             onchange="handleZipFile()"
+            placeholder="上传ZIP压缩包 • 自动处理所有.xlsx文件 • 保持原始文件名和结构"
+            style="margin-bottom: 15px; padding: 20px 30px; font-size: 18px; border: 3px dashed #007bff; border-radius: 8px; background: #fff; cursor: pointer; width: 90%; max-width: 500px;"
           />
-          <small style="color: #666; display: block; margin-top: 5px">
-            上传包含多个Excel文件的ZIP压缩包，批量应用样式修改
-            <br />
-            <span style="color: #28a745">✓ 自动处理ZIP包内所有.xlsx文件</span
-            ><br />
-            <span style="color: #28a745">✓ 保持原始文件名和目录结构</span><br />
-            <span style="color: #28a745">✓ 忽略非Excel文件</span>
-          </small>
+
+          <!-- <div style="background: #fff; padding: 15px; border-radius: 6px; border-left: 3px solid #007bff; margin-bottom: 15px;">
+            <p style="margin: 0 0 8px 0; font-size: 15px; font-weight: 600; color: #333;">
+              上传ZIP压缩包
+            </p>
+            <p style="margin: 5px 0; font-size: 13px; color: #666;">
+              • 自动处理所有.xlsx文件
+            </p>
+            <p style="margin: 5px 0; font-size: 13px; color: #666;">
+              • 保持原始文件名和结构
+            </p>
+          </div> -->
 
           <!-- ZIP批量处理进度条 -->
-          <div
-            id="zipProgressContainer"
-            style="display: none; margin-top: 15px"
-          >
-            <div style="margin-bottom: 8px">
-              <span id="zipProgressText" style="font-size: 14px; color: #333"
-                >准备处理...</span
-              >
-              <span
-                id="zipProgressPercent"
-                style="float: right; font-size: 14px; color: #666"
-                >0%</span
-              >
+          <div id="zipProgressContainer" style="display: none; margin-top: 15px;">
+            <div style="margin-bottom: 8px; display: flex; justify-content: space-between;">
+              <span id="zipProgressText" style="font-size: 14px; color: #333;">准备处理...</span>
+              <span id="zipProgressPercent" style="font-size: 14px; font-weight: 600; color: #007bff;">0%</span>
             </div>
-            <div
-              style="
-                width: 100%;
-                background-color: #f0f0f0;
-                border-radius: 4px;
-                overflow: hidden;
-              "
-            >
-              <div
-                id="zipProgressBar"
-                style="
-                  width: 0%;
-                  height: 20px;
-                  background: linear-gradient(90deg, #28a745 0%, #20c997 100%);
-                  transition: width 0.3s ease;
-                  border-radius: 4px;
-                "
-              ></div>
+            <div style="width: 100%; height: 24px; background: #e9ecef; border-radius: 4px; overflow: hidden;">
+              <div id="zipProgressBar" style="width: 0%; height: 100%; background: #007bff; transition: width 0.3s;"></div>
             </div>
-            <div
-              id="zipProgressDetails"
-              style="margin-top: 8px; font-size: 12px; color: #666"
-            >
+            <div id="zipProgressDetails" style="margin-top: 8px; font-size: 12px; color: #666;">
               <span id="zipCurrentFile"></span>
             </div>
           </div>
