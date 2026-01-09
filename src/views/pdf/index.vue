@@ -61,13 +61,13 @@ const sourceZipFileName = ref(""); // 记录上传的 ZIP 文件名
 const overallProgress = computed(() => {
   if (fileList.value.length === 0) return 0;
 
-  const totalProgress = fileList.value.reduce((sum, item) => {
-    if (item.status === 'success') return sum + 100;
-    if (item.status === 'error') return sum + 0;
-    return sum + (item.progress || 0);
-  }, 0);
+  // 计算已完成的文件数量(成功 + 失败)
+  const completedCount = fileList.value.filter(item =>
+    item.status === 'success' || item.status === 'error'
+  ).length;
 
-  return Math.floor(totalProgress / fileList.value.length);
+  // 进度百分比 = 已完成数量 / 总数量
+  return Math.floor((completedCount / fileList.value.length) * 100);
 });
 
 // 计算成功和失败数量
@@ -355,27 +355,28 @@ const downloadRenamedFile = (fileItem: FileParseItem) => {
   ElMessage.success(`已下载: ${fileItem.newFileName}`);
 };
 
-// 批量导出所有重命名后的文件为 ZIP
+// 批量导出所有文件(包括成功和失败)为 ZIP
 const exportAllRenamedFiles = async () => {
-  // 筛选出成功解析且有新文件名的文件
-  const successFiles = fileList.value.filter(item =>
-    item.status === "success" && item.newFileName
-  );
+  // 筛选出有新文件名的文件(包括成功和失败状态)
+  const filesToExport = fileList.value.filter(item => item.newFileName);
 
-  if (successFiles.length === 0) {
-    ElMessage.warning("没有已成功解析的文件可以导出");
+  if (filesToExport.length === 0) {
+    ElMessage.warning("没有可导出的文件");
     return;
   }
 
   try {
-    ElMessage.info(`正在打包 ${successFiles.length} 个文件...`);
+    const successCount = filesToExport.filter(item => item.status === "success").length;
+    const errorCount = filesToExport.filter(item => item.status === "error").length;
+
+    ElMessage.info(`正在打包 ${filesToExport.length} 个文件(成功: ${successCount}, 失败: ${errorCount})...`);
 
     // 创建 ZIP
     const JSZip = (await import("jszip")).default;
     const zip = new JSZip();
 
     // 添加文件到 ZIP，保持原有目录结构
-    for (const item of successFiles) {
+    for (const item of filesToExport) {
       if (item.zipPath) {
         // 如果来自 ZIP，保持原有路径结构
         // zipPath 格式如: "folder/subfolder/file.pdf"
@@ -419,7 +420,7 @@ const exportAllRenamedFiles = async () => {
     // 下载 ZIP 文件
     saveAs(zipBlob, exportFileName);
 
-    ElMessage.success(`成功导出 ${successFiles.length} 个文件`);
+    ElMessage.success(`成功导出 ${filesToExport.length} 个文件(成功: ${successCount}, 失败: ${errorCount})`);
   } catch (error) {
     console.error("导出失败:", error);
     ElMessage.error(`导出失败: ${error.message}`);
@@ -560,7 +561,7 @@ onUnmounted(() => {
                 type="success"
                 :icon="Download"
                 @click="exportAllRenamedFiles"
-                :disabled="fileList.filter(item => item.status === 'success' && item.newFileName).length === 0"
+                :disabled="fileList.filter(item => item.newFileName).length === 0"
               >
                 批量导出
               </el-button>
