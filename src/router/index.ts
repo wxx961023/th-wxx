@@ -34,7 +34,7 @@ const homeRoute: RouteRecordRaw = {
   ]
 }
 
-/** PDF批量重命名路由 */
+/** PDF工具路由 */
 const pdfRoute: RouteRecordRaw = {
   path: "/pdf",
   name: "PdfModule",
@@ -54,7 +54,14 @@ const pdfRoute: RouteRecordRaw = {
         title: "发票"
       }
     },
-
+    {
+      path: "/pdf/parser",
+      name: "PdfParser",
+      component: () => import("@/views/pdf/index.vue"),
+      meta: {
+        title: "PDF解析"
+      }
+    }
   ]
 }
 
