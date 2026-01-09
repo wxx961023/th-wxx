@@ -9,7 +9,9 @@
       "Bash(nslookup:*)",
       "WebSearch",
       "Bash(npx vue-tsc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Skill(zcf:git-commit)",
+      "Skill(zcf:git-commit:*)"
     ],
     "deny": [],
     "ask": []
