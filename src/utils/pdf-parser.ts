@@ -10,8 +10,38 @@
 import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
 
-// 设置PDF.js的worker路径，使用本地worker文件
-pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+// Promise.withResolvers polyfill for Win7 compatibility
+if (typeof Promise !== "undefined" && !Promise.withResolvers) {
+  console.log("[pdf-parser] 添加 Promise.withResolvers polyfill");
+  (Promise as any).withResolvers = function <T>() {
+    let resolve: (value: T | PromiseLike<T>) => void;
+    let reject: (reason?: any) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+}
+
+// 检查是否支持 Promise.withResolvers
+const supportsPromiseWithResolvers =
+  typeof Promise !== "undefined" && typeof Promise.withResolvers === "function";
+
+// Win7 或不支持 Promise.withResolvers 时禁用 worker
+// PDF.js worker 在不支持 Promise.withResolvers 的环境下会报错
+const shouldDisableWorker =
+  !supportsPromiseWithResolvers ||
+  navigator.userAgent.includes("Windows NT 6.1") ||
+  navigator.userAgent.includes("Windows 7");
+
+if (shouldDisableWorker) {
+  console.warn("[pdf-parser] 禁用 PDF.js worker 以兼容 Win7 环境");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+} else {
+  // 设置PDF.js的worker路径，使用本地worker文件
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+}
 
 // 导出 PDF.js 配置选项，用于支持中文字体
 // 这对于正确提取中文、日文、韩文等 CJK 字符非常重要
