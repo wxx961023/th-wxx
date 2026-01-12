@@ -35,9 +35,14 @@ const shouldDisableWorker =
   navigator.userAgent.includes("Windows NT 6.1") ||
   navigator.userAgent.includes("Windows 7");
 
+// 导出：是否禁用了 worker
+export const isWorkerDisabled = shouldDisableWorker;
+
 if (shouldDisableWorker) {
   console.warn("[pdf-parser] 禁用 PDF.js worker 以兼容 Win7 环境");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  // 不设置 workerSrc，让 PDF.js 在主线程运行
+  // 设置为 undefined 而不是空字符串，避免 "No workerSrc specified" 错误
+  delete (pdfjsLib.GlobalWorkerOptions as any).workerSrc;
 } else {
   // 设置PDF.js的worker路径，使用本地worker文件
   pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
@@ -58,7 +63,9 @@ export const pdfjsDocumentOptions = {
   // 禁用流式处理
   disableStream: true,
   // 禁用 eval（安全考虑）
-  isEvalSupported: false
+  isEvalSupported: false,
+  // Win7 兼容：禁用 worker fetch
+  useWorkerFetch: !shouldDisableWorker
 };
 
 // 检测 cMap 是否可用的函数
