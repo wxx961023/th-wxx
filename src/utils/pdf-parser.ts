@@ -65,7 +65,9 @@ export const pdfjsDocumentOptions = {
   // 禁用 eval（安全考虑）
   isEvalSupported: false,
   // Win7 兼容：禁用 worker fetch
-  useWorkerFetch: !shouldDisableWorker
+  useWorkerFetch: !shouldDisableWorker,
+  // Win7 兼容：禁用 worker（关键配置）
+  useWorker: !shouldDisableWorker
 };
 
 // 检测 cMap 是否可用的函数
