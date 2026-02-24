@@ -463,7 +463,9 @@ export function printPDFContent(
 
 /**
  * 从PDF文本中提取姓名
- * 匹配模式：身份证号后跟姓名，如 "4202221988****5775 肖烨" 或 "2114031985****843X 王森"
+ * 匹配模式：
+ * 1. 身份证号后跟姓名，如 "4202221988****5775 肖烨" 或 "2114031985****843X 王森"
+ * 2. 护照号后跟姓名，如 "H043388** 林茵楠"
  *
  * @param text - PDF文本内容
  * @returns 提取到的姓名，未找到返回null
@@ -472,25 +474,34 @@ export function extractName(text: string): string | null {
   // 先清洗文本：去掉所有空格和换行符
   const cleanedText = text.replace(/[\s\n\r\t]+/g, '');
 
-  // 匹配模式：18位身份证 + 4-6个星号 + 3-4位字符（可包含数字和X） + 中文姓名（2-4个字符）
-  // 姓名后可以是：
-  // 1. 数字、下划线、英文字母
-  // 2. "电子客票号"（完整的电子客票号文本）
+  // 模式1：18位身份证 + 4-6个星号 + 3-4位字符（可包含数字和X） + 中文姓名（2-4个字符）
+  // 姓名后可以是：数字、下划线、英文字母、"电子客票号"或结尾
   // 例如：4202221988****5775肖烨电子客票号 或 2114031985****843X王森26119110010000193505
-  const namePattern = /\d{17}[\dXx]\*{4,6}[\dXx]{3,4}([\u4e00-\u9fa5]{2,4})(?=[0-9_a-zA-Z]|电子客票号|$)/;
+  const idCardPattern = /\d{17}[\dXx]\*{4,6}[\dXx]{3,4}([\u4e00-\u9fa5]{2,4})(?=[0-9_a-zA-Z]|电子客票号|$)/;
 
-  // 先尝试精确匹配
-  let match = cleanedText.match(namePattern);
-
-  // 如果精确匹配失败，尝试更宽松的模式
-  if (!match) {
-    // 模式：数字开头，包含星号，最后是中文姓名，姓名后必须是数字、下划线、字母、"电子客票号"或结尾
-    const loosePattern = /\d+\*{4,}[\dXx]+([\u4e00-\u9fa5]{2,4})(?=[0-9_a-zA-Z]|电子客票号|$)/;
-    match = cleanedText.match(loosePattern);
+  let match = cleanedText.match(idCardPattern);
+  if (match && match[1]) {
+    console.log(`✓ [身份证模式] 提取到姓名: ${match[1]}`);
+    return match[1];
   }
 
+  // 模式2：护照号格式 - 字母开头 + 数字 + 星号 + 中文姓名
+  // 例如：H043388**林茵楠 或 G12345678***张三
+  const passportPattern = /[A-Za-z]\d{5,}\*{2,}([\u4e00-\u9fa5]{2,4})(?=[0-9_a-zA-Z]|电子客票号|$)/;
+
+  match = cleanedText.match(passportPattern);
   if (match && match[1]) {
-    console.log(`✓ 提取到姓名: ${match[1]}`);
+    console.log(`✓ [护照模式] 提取到姓名: ${match[1]}`);
+    return match[1];
+  }
+
+  // 模式3：宽松模式 - 数字开头，包含星号，最后是中文姓名
+  // 例如：4202221988****5775肖烨
+  const loosePattern = /\d+\*{4,}[\dXx]+([\u4e00-\u9fa5]{2,4})(?=[0-9_a-zA-Z]|电子客票号|$)/;
+
+  match = cleanedText.match(loosePattern);
+  if (match && match[1]) {
+    console.log(`✓ [宽松模式] 提取到姓名: ${match[1]}`);
     return match[1];
   }
 
