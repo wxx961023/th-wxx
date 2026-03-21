@@ -9,6 +9,7 @@ import DdlxBillSplit from "./components/ddlx.vue";
 import HabxBillSplit from "./components/habx.vue";
 import AbsenBillSplit from "./components/absen.vue";
 import GbzbBillSplit from "./components/gbzb.vue";
+import XinteBillSplit from "./components/xinte.vue";
 
 defineOptions({
   name: "BillSplitIndex"
@@ -80,6 +81,12 @@ const selectedComponent = ref<string>("cxjg");
                 <p>适用于国宝造币的账单分账处理</p>
               </div>
             </el-radio>
+            <el-radio label="xinte">
+              <div class="component-option">
+                <h4>星特</h4>
+                <p>适用于星特的账单分账处理</p>
+              </div>
+            </el-radio>
           </el-radio-group>
         </el-card>
       </div>
@@ -95,6 +102,7 @@ const selectedComponent = ref<string>("cxjg");
         <HabxBillSplit v-else-if="selectedComponent === 'habx'" />
         <AbsenBillSplit v-else-if="selectedComponent === 'absen'" />
         <GbzbBillSplit v-else-if="selectedComponent === 'gbzb'" />
+        <XinteBillSplit v-else-if="selectedComponent === 'xinte'" />
       </div>
     </div>
   </div>
