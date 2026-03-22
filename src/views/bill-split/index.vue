@@ -11,6 +11,7 @@ import AbsenBillSplit from "./components/absen.vue";
 import GbzbBillSplit from "./components/gbzb.vue";
 import XinteBillSplit from "./components/xinte.vue";
 import SzjlBillSplit from "./components/szjl.vue";
+import KuayueBillSplit from "./components/kuayue.vue";
 
 defineOptions({
   name: "BillSplitIndex"
@@ -94,6 +95,12 @@ const selectedComponent = ref<string>("cxjg");
                 <p>适用于苏州金龙的账单分账处理</p>
               </div>
             </el-radio>
+            <el-radio label="kuayue">
+              <div class="component-option">
+                <h4>跨越</h4>
+                <p>适用于跨越的账单分账处理（机票+酒店汇总）</p>
+              </div>
+            </el-radio>
           </el-radio-group>
         </el-card>
       </div>
@@ -111,6 +118,7 @@ const selectedComponent = ref<string>("cxjg");
         <GbzbBillSplit v-else-if="selectedComponent === 'gbzb'" />
         <XinteBillSplit v-else-if="selectedComponent === 'xinte'" />
         <SzjlBillSplit v-else-if="selectedComponent === 'szjl'" />
+        <KuayueBillSplit v-else-if="selectedComponent === 'kuayue'" />
       </div>
     </div>
   </div>

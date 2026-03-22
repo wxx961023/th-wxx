@@ -204,7 +204,7 @@ const transformDomesticData = (
 };
 
 // 转换国际机票数据
-const                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   = (
+const transformIndternationalData = (
   rows: any[][],
   startIndex: number
 ): any[][] => {
@@ -274,7 +274,7 @@ const readFile = (file: File) => {
       if (internationalSheet) {
         const rows = readWorksheetData(internationalSheet);
         if (rows.length > 1) {
-          const transformedData =                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  (rows, allData.length + 1);
+          const transformedData =            d                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (rows, allData.length + 1);
           allData.push(...transformedData);
           internationalCount = transformedData.length;
         }
