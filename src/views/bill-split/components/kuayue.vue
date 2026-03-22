@@ -84,6 +84,52 @@ const FLIGHT_HEADER_MAPPING: Record<number, string> = {
   21: "审批单号"
 };
 
+// 酒店新表头定义
+const HOTEL_NEW_HEADERS = [
+  "序号",
+  "成本中心",
+  "酒店类型",
+  "订单号",
+  "入住日期(yyyy-MM-dd)",
+  "离店日期(yyyy-MM-dd)",
+  "酒店名称",
+  "总金额/元（房间价格）",
+  "房型",
+  "入住城市",
+  "入住人",
+  "入住人工号",
+  "同住人",
+  "间夜数",
+  "状态",
+  "付款方式",
+  "公司支付金额",
+  "个人支付金额",
+  "供应商",
+  "审批单号",
+  "工资区域"
+];
+
+// 酒店表头映射：新表头索引 -> 旧表头名称
+const HOTEL_HEADER_MAPPING: Record<number, string> = {
+  2: "酒店类型",
+  3: "订单号（重复项标亮）",
+  4: "入住日期",
+  5: "离店日期",
+  6: "酒店名称",
+  7: "房费",
+  8: "房型",
+  9: "入住城市",
+  10: "入住人",
+  11: "入住人工号",
+  12: "同住人",
+  13: "间夜数",
+  14: "状态",
+  15: "付款方式",
+  16: "公司支付金额",
+  17: "个人支付金额",
+  19: "审批单号"
+};
+
 // 机票文件相关
 const flightFile = ref<File | null>(null);
 const flightData = ref<{ headers: any[]; data: any[][]; transformedData: any[][] } | null>(null);
@@ -91,7 +137,7 @@ const flightLoading = ref(false);
 
 // 酒店文件相关
 const hotelFile = ref<File | null>(null);
-const hotelData = ref<{ headers: any[]; data: any[][] } | null>(null);
+const hotelData = ref<{ headers: any[]; data: any[][]; transformedData: any[][] } | null>(null);
 const hotelLoading = ref(false);
 
 // 汇总相关
@@ -123,7 +169,10 @@ const beforeUpload = (file: File) => {
 };
 
 // 读取Excel文件（支持 .xls 和 .xlsx）
-const readExcelFile = async (file: File): Promise<{ headers: any[]; data: any[][] }> => {
+const readExcelFile = async (
+  file: File,
+  sheetName?: string
+): Promise<{ headers: any[]; data: any[][] }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -136,19 +185,46 @@ const readExcelFile = async (file: File): Promise<{ headers: any[]; data: any[][
         if (isXls) {
           // 使用 xlsx 库读取 .xls 文件
           const workbook = XLSX.read(buffer, { type: "array" });
-          const firstSheetName = workbook.SheetNames[0];
-          if (!firstSheetName) {
+
+          // 查找目标工作表
+          let targetSheetName = workbook.SheetNames[0];
+          if (sheetName) {
+            const foundSheet = workbook.SheetNames.find(
+              name => name.trim() === sheetName.trim() || name.includes(sheetName)
+            );
+            if (foundSheet) {
+              targetSheetName = foundSheet;
+              console.log(`找到工作表: "${foundSheet}"`);
+            } else {
+              console.warn(`未找到工作表 "${sheetName}"，使用默认工作表: "${targetSheetName}"`);
+            }
+          }
+
+          if (!targetSheetName) {
             reject(new Error("未找到工作表"));
             return;
           }
-          const worksheet = workbook.Sheets[firstSheetName];
+          const worksheet = workbook.Sheets[targetSheetName];
           rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
         } else {
           // 使用 ExcelJS 读取 .xlsx 文件
           const workbook = new ExcelJS.Workbook();
           await workbook.xlsx.load(buffer);
 
-          const worksheet = workbook.worksheets[0];
+          // 查找目标工作表
+          let worksheet = workbook.worksheets[0];
+          if (sheetName) {
+            const foundWorksheet = workbook.worksheets.find(
+              ws => ws.name?.trim() === sheetName.trim() || ws.name?.includes(sheetName)
+            );
+            if (foundWorksheet) {
+              worksheet = foundWorksheet;
+              console.log(`找到工作表: "${foundWorksheet.name}"`);
+            } else {
+              console.warn(`未找到工作表 "${sheetName}"，使用默认工作表: "${worksheet?.name}"`);
+            }
+          }
+
           if (!worksheet) {
             reject(new Error("未找到工作表"));
             return;
@@ -363,6 +439,54 @@ const transformFlightData = (
   return transformedData;
 };
 
+// 转换酒店数据
+const transformHotelData = (
+  rows: any[][],
+  headerIndexMap: Map<string, number>
+): any[][] => {
+  const transformedData: any[][] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const oldRow = rows[i];
+    const newRow: any[] = new Array(HOTEL_NEW_HEADERS.length).fill("");
+
+    // 序号
+    newRow[0] = i + 1;
+
+    // 成本中心 - 空
+    newRow[1] = "";
+
+    // 根据映射填充数据（使用模糊匹配）
+    for (const [newIdx, oldHeader] of Object.entries(HOTEL_HEADER_MAPPING)) {
+      const oldIdx = findHeaderIndex(headerIndexMap, oldHeader);
+      if (oldIdx !== undefined) {
+        newRow[parseInt(newIdx)] = oldRow[oldIdx] ?? "";
+      }
+    }
+
+    // 入住日期格式化
+    newRow[4] = formatDate(newRow[4]);
+
+    // 离店日期格式化
+    newRow[5] = formatDate(newRow[5]);
+
+    // 格式化金额列
+    newRow[7] = formatAmount(newRow[7]);   // 总金额/元（房间价格）
+    newRow[16] = formatAmount(newRow[16]); // 公司支付金额
+    newRow[17] = formatAmount(newRow[17]); // 个人支付金额
+
+    // 供应商 - 固定写"特航商旅"
+    newRow[18] = "特航商旅";
+
+    // 工资区域 - 空
+    newRow[20] = "";
+
+    transformedData.push(newRow);
+  }
+
+  return transformedData;
+};
+
 // 处理机票文件上传
 const handleFlightFileChange = async (uploadFile: any) => {
   const file = uploadFile.raw;
@@ -407,10 +531,24 @@ const handleHotelFileChange = async (uploadFile: any) => {
 
   hotelLoading.value = true;
   try {
-    const result = await readExcelFile(file);
+    // 酒店文件需要读取"酒店"工作表
+    const result = await readExcelFile(file, "酒店");
+    const headerIndexMap = buildHeaderIndexMap(result.headers);
+
+    // 转换数据
+    const transformedData = transformHotelData(result.data, headerIndexMap);
+
     hotelFile.value = file;
-    hotelData.value = result;
-    ElMessage.success(`酒店文件上传成功，共 ${result.data.length} 条数据`);
+    hotelData.value = {
+      headers: result.headers,
+      data: result.data,
+      transformedData
+    };
+
+    console.log("酒店表头映射:", Object.fromEntries(headerIndexMap));
+    console.log(`酒店数据转换完成，共 ${transformedData.length} 条`);
+
+    ElMessage.success(`酒店文件上传成功，共 ${transformedData.length} 条数据`);
   } catch (error: any) {
     ElMessage.error(error.message || "读取酒店文件失败");
     hotelFile.value = null;
@@ -446,25 +584,13 @@ const summarizeData = () => {
   summarizing.value = true;
 
   try {
-    const allData: any[][] = [];
+    // 计算总数
+    const flightCount = flightData.value?.transformedData?.length || 0;
+    const hotelCount = hotelData.value?.transformedData?.length || 0;
 
-    // 使用机票新表头
-    let headers = FLIGHT_NEW_HEADERS;
-
-    // 添加转换后的机票数据
-    if (flightData.value?.transformedData) {
-      allData.push(...flightData.value.transformedData);
-    }
-
-    // TODO: 添加酒店数据处理
-
-    summaryData.value = {
-      headers,
-      data: allData
-    };
     showSummary.value = true;
 
-    ElMessage.success(`汇总完成，共 ${allData.length} 条数据`);
+    ElMessage.success(`汇总完成，机票 ${flightCount} 条，酒店 ${hotelCount} 条`);
   } catch (error) {
     console.error("汇总失败:", error);
     ElMessage.error("汇总失败");
@@ -473,9 +599,163 @@ const summarizeData = () => {
   }
 };
 
+// 生成工作表的通用函数
+const generateWorksheet = (
+  worksheet: ExcelJS.Worksheet,
+  titleText: string,
+  headers: string[],
+  data: any[][],
+  duplicateCols: { name: string; col: number }[],
+  sumCols?: number[] // 需要合计的列索引数组
+) => {
+  // 第一行：标题行
+  const titleRow = worksheet.addRow([titleText]);
+  titleRow.height = 30;
+  const titleCell = titleRow.getCell(1);
+  titleCell.font = { bold: true, size: 14 };
+  titleCell.alignment = { horizontal: "center", vertical: "middle" };
+
+  // 合并标题行单元格
+  worksheet.mergeCells(1, 1, 1, headers.length);
+
+  // 第二行：表头
+  worksheet.addRow(headers);
+
+  // 添加数据
+  for (const row of data) {
+    worksheet.addRow(row);
+  }
+
+  // 添加合计行
+  let totalRow: ExcelJS.Row | null = null;
+  if (sumCols && sumCols.length > 0 && data.length > 0) {
+    // 计算各列合计
+    const totals: Record<number, number> = {};
+    sumCols.forEach(col => {
+      totals[col] = 0;
+    });
+
+    for (const row of data) {
+      sumCols.forEach(col => {
+        const val = parseFloat(row[col]) || 0;
+        totals[col] += val;
+      });
+    }
+
+    // 创建合计行
+    const totalData = new Array(headers.length).fill("");
+    totalData[0] = "合计";
+    sumCols.forEach(col => {
+      totalData[col] = totals[col].toFixed(2);
+    });
+    totalRow = worksheet.addRow(totalData);
+  }
+
+  // 设置表头样式（第2行）
+  const headerRow = worksheet.getRow(2);
+  headerRow.height = 22;
+  headerRow.eachCell((cell) => {
+    cell.font = { bold: true };
+    cell.alignment = { horizontal: "center", vertical: "middle" };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFFFFF99" }
+    };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" }
+    };
+  });
+
+  // 设置数据行样式（从第3行开始，不含合计行）
+  const dataEndRow = totalRow ? worksheet.rowCount - 1 : worksheet.rowCount;
+  for (let i = 3; i <= dataEndRow; i++) {
+    const row = worksheet.getRow(i);
+    row.height = 22;
+    row.eachCell((cell) => {
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.font = { size: 10 };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+  }
+
+  // 设置合计行样式
+  if (totalRow) {
+    totalRow.height = 22;
+    totalRow.eachCell((cell) => {
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.font = { bold: true, size: 10 };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+  }
+
+  // 检测重复值并高亮（不含合计行）
+  duplicateCols.forEach(({ col }) => {
+    const valueMap: Map<string, number[]> = new Map();
+
+    // 收集所有值及其行号（从第3行到数据结束行）
+    for (let i = 3; i <= dataEndRow; i++) {
+      const cell = worksheet.getRow(i).getCell(col);
+      const value = cell.value?.toString()?.trim();
+      if (value) {
+        if (!valueMap.has(value)) {
+          valueMap.set(value, []);
+        }
+        valueMap.get(value)!.push(i);
+      }
+    }
+
+    // 对重复的值填充底色
+    for (const [, rows] of valueMap) {
+      if (rows.length > 1) {
+        rows.forEach((rowNum) => {
+          const cell = worksheet.getRow(rowNum).getCell(col);
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFF9900" }
+          };
+        });
+      }
+    }
+  });
+
+  // 自动调整列宽（跳过第1行标题）
+  worksheet.columns.forEach((column) => {
+    let maxWidth = 8;
+    column.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
+      if (rowNumber === 1) return;
+      const cellValue = cell.value?.toString() || "";
+      let width = 0;
+      for (const char of cellValue) {
+        if (/[\u4e00-\u9fa5]/.test(char)) {
+          width += 2;
+        } else {
+          width += 1;
+        }
+      }
+      maxWidth = Math.max(maxWidth, width);
+    });
+    column.width = Math.min(maxWidth + 2, 30);
+  });
+};
+
 // 生成并下载Excel
 const generateExcel = async () => {
-  if (!summaryData.value || summaryData.value.data.length === 0) {
+  if (!flightData.value?.transformedData && !hotelData.value?.transformedData) {
     ElMessage.warning("没有可导出的数据");
     return;
   }
@@ -484,7 +764,6 @@ const generateExcel = async () => {
 
   try {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("国内机票");
 
     // 计算动态日期（当前日期向前推1个月）
     const now = new Date();
@@ -493,115 +772,36 @@ const generateExcel = async () => {
     const month = targetDate.getMonth() + 1;
     const titleText = `跨越速运集团有限公司${year}年${month}月账单`;
 
-    // 第一行：标题行
-    const titleRow = worksheet.addRow([titleText]);
-    titleRow.height = 30;
-    const titleCell = titleRow.getCell(1);
-    titleCell.font = { bold: true, size: 14 };
-    titleCell.alignment = { horizontal: "center", vertical: "middle" };
-
-    // 合并标题行单元格
-    worksheet.mergeCells(1, 1, 1, summaryData.value.headers.length);
-
-    // 第二行：表头
-    worksheet.addRow(summaryData.value.headers);
-
-    // 添加数据
-    for (const row of summaryData.value.data) {
-      worksheet.addRow(row);
+    // 生成机票工作表
+    if (flightData.value?.transformedData && flightData.value.transformedData.length > 0) {
+      const flightSheet = workbook.addWorksheet("国内机票");
+      generateWorksheet(
+        flightSheet,
+        titleText,
+        FLIGHT_NEW_HEADERS,
+        flightData.value.transformedData,
+        [
+          { name: "订单号", col: 4 },   // D列
+          { name: "票号", col: 12 }     // L列
+        ],
+        [12] // 消费金额列索引（合计）
+      );
     }
 
-    // 设置表头样式（第2行）
-    const headerRow = worksheet.getRow(2);
-    headerRow.height = 22;
-    headerRow.eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.alignment = { horizontal: "center", vertical: "middle" };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFFFFF99" }
-      };
-      cell.border = {
-        top: { style: "thin" },
-        left: { style: "thin" },
-        bottom: { style: "thin" },
-        right: { style: "thin" }
-      };
-    });
-
-    // 设置数据行样式（从第3行开始）
-    for (let i = 3; i <= worksheet.rowCount; i++) {
-      const row = worksheet.getRow(i);
-      row.height = 22;
-      row.eachCell((cell) => {
-        cell.alignment = { horizontal: "center", vertical: "middle" };
-        cell.font = { size: 10 };
-        cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" }
-        };
-      });
+    // 生成酒店工作表
+    if (hotelData.value?.transformedData && hotelData.value.transformedData.length > 0) {
+      const hotelSheet = workbook.addWorksheet("酒店");
+      generateWorksheet(
+        hotelSheet,
+        titleText,
+        HOTEL_NEW_HEADERS,
+        hotelData.value.transformedData,
+        [
+          { name: "订单号", col: 4 }    // D列
+        ],
+        [7, 16, 17] // 总金额、公司支付金额、个人支付金额 列索引（合计）
+      );
     }
-
-    // 检测重复订单号和票号并高亮
-    // 订单号列（索引3，第4列D列），票号列（索引11，第12列L列）
-    const duplicateCols = [
-      { name: "订单号", col: 4 },   // D列
-      { name: "票号", col: 12 }     // L列
-    ];
-
-    duplicateCols.forEach(({ name, col }) => {
-      const valueMap: Map<string, number[]> = new Map();
-
-      // 收集所有值及其行号
-      for (let i = 3; i <= worksheet.rowCount; i++) {
-        const cell = worksheet.getRow(i).getCell(col);
-        const value = cell.value?.toString()?.trim();
-        if (value) {
-          if (!valueMap.has(value)) {
-            valueMap.set(value, []);
-          }
-          valueMap.get(value)!.push(i);
-        }
-      }
-
-      // 对重复的值填充底色
-      for (const [, rows] of valueMap) {
-        if (rows.length > 1) {
-          rows.forEach((rowNum) => {
-            const cell = worksheet.getRow(rowNum).getCell(col);
-            cell.fill = {
-              type: "pattern",
-              pattern: "solid",
-              fgColor: { argb: "FFFF9900" }
-            };
-          });
-        }
-      }
-    });
-
-    // 自动调整列宽（跳过第1行标题，从第2行表头开始计算）
-    worksheet.columns.forEach((column) => {
-      let maxWidth = 8;
-      column.eachCell?.({ includeEmpty: true }, (cell, rowNumber) => {
-        // 跳过第1行标题行
-        if (rowNumber === 1) return;
-        const cellValue = cell.value?.toString() || "";
-        let width = 0;
-        for (const char of cellValue) {
-          if (/[\u4e00-\u9fa5]/.test(char)) {
-            width += 2;
-          } else {
-            width += 1;
-          }
-        }
-        maxWidth = Math.max(maxWidth, width);
-      });
-      column.width = Math.min(maxWidth + 2, 30);
-    });
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
@@ -715,7 +915,7 @@ const resetAll = () => {
           </el-icon>
           <div class="file-info">
             <span class="file-name">{{ hotelFile.name }}</span>
-            <span class="file-count">共 {{ hotelData?.data.length || 0 }} 条数据</span>
+            <span class="file-count">共 {{ hotelData?.transformedData?.length || 0 }} 条数据</span>
           </div>
         </div>
       </el-card>
@@ -726,11 +926,11 @@ const resetAll = () => {
       <el-button
         type="primary"
         size="large"
-        :loading="summarizing"
+        :loading="generating"
         :disabled="!flightData && !hotelData"
-        @click="summarizeData"
+        @click="generateExcel"
       >
-        {{ summarizing ? "汇总中..." : "汇总数据" }}
+        {{ generating ? "生成中..." : "生成Excel" }}
       </el-button>
       <el-button size="large" @click="resetAll">
         重置
@@ -746,45 +946,71 @@ const resetAll = () => {
     </div>
 
     <!-- 汇总结果预览 -->
-    <el-card v-if="showSummary && summaryData" class="summary-card">
-      <template #header>
-        <div class="card-header">
-          <span>汇总结果</span>
-          <div class="header-actions">
-            <span class="summary-count">共 {{ summaryData.data.length }} 条数据</span>
-            <el-button
-              type="primary"
-              :loading="generating"
-              @click="generateExcel"
-            >
-              {{ generating ? "生成中..." : "生成并下载" }}
-            </el-button>
+    <div v-if="showSummary" class="summary-section">
+      <!-- 机票预览 -->
+      <el-card v-if="flightData?.transformedData?.length" class="summary-card">
+        <template #header>
+          <div class="card-header">
+            <span>国内机票</span>
+            <span class="summary-count">共 {{ flightData.transformedData.length }} 条</span>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <el-table
-        :data="summaryData.data.slice(0, 10)"
-        border
-        stripe
-        max-height="400"
-      >
-        <el-table-column
-          v-for="(header, index) in summaryData.headers"
-          :key="index"
-          :prop="String(index)"
-          :label="header || `列${index}`"
-          min-width="100"
+        <el-table
+          :data="flightData.transformedData.slice(0, 5)"
+          border
+          stripe
+          max-height="300"
         >
-          <template #default="{ row }">
-            {{ row[index] }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <p class="preview-tip">
-        仅显示前10条数据，共 {{ summaryData.data.length }} 条
-      </p>
-    </el-card>
+          <el-table-column
+            v-for="(header, index) in FLIGHT_NEW_HEADERS"
+            :key="index"
+            :prop="String(index)"
+            :label="header || `列${index}`"
+            min-width="100"
+          >
+            <template #default="{ row }">
+              {{ row[index] }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <p class="preview-tip">
+          仅显示前5条数据
+        </p>
+      </el-card>
+
+      <!-- 酒店预览 -->
+      <el-card v-if="hotelData?.transformedData?.length" class="summary-card">
+        <template #header>
+          <div class="card-header">
+            <span>酒店</span>
+            <span class="summary-count">共 {{ hotelData.transformedData.length }} 条</span>
+          </div>
+        </template>
+
+        <el-table
+          :data="hotelData.transformedData.slice(0, 5)"
+          border
+          stripe
+          max-height="300"
+        >
+          <el-table-column
+            v-for="(header, index) in HOTEL_NEW_HEADERS"
+            :key="index"
+            :prop="String(index)"
+            :label="header || `列${index}`"
+            min-width="100"
+          >
+            <template #default="{ row }">
+              {{ row[index] }}
+            </template>
+          </el-table-column>
+        </el-table>
+        <p class="preview-tip">
+          仅显示前5条数据
+        </p>
+      </el-card>
+    </div>
   </div>
 </template>
 
@@ -893,5 +1119,16 @@ const resetAll = () => {
   font-size: 12px;
   margin-top: 10px;
   text-align: right;
+}
+
+.summary-section {
+  margin-top: 20px;
+}
+
+.download-section {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding: 20px 0;
 }
 </style>
