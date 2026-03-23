@@ -158,6 +158,8 @@ const generating = ref(false);
 const compareNewFile = ref<File | null>(null);
 const compareNewData = ref<{ headers: any[]; data: any[][] } | null>(null);
 const compareNewLoading = ref(false);
+// 新表酒店数据
+const compareNewHotelData = ref<{ headers: any[]; data: any[][]; summary: Map<string, number> } | null>(null);
 
 // 对比相关 - TMC系统文件（机票）
 const compareTmcFile = ref<File | null>(null);
@@ -169,10 +171,16 @@ const tmcTuipiaoData = ref<{ headers: any[]; data: any[][] } | null>(null);
 
 // 对比相关 - 酒店系统文件
 const compareHotelSystemFile = ref<File | null>(null);
-const compareHotelSystemData = ref<{ headers: any[]; data: any[][] } | null>(
+const compareHotelSystemData = ref<{ headers: any[]; data: any[][]; summary: Map<string, number> } | null>(
   null
 );
 const compareHotelSystemLoading = ref(false);
+
+// 酒店比对相关
+const hotelComparing = ref(false);
+const hotelCompareResult = ref<{ hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[]>([]);
+const showHotelCompareResult = ref(false);
+const hotelCompareFullscreen = ref(false);
 
 // 对比结果类型定义
 interface CompareResultItem {
@@ -230,9 +238,6 @@ const readExcelFile = async (
           // 使用 xlsx 库读取 .xls 文件
           const workbook = XLSX.read(buffer, { type: "array" });
 
-          // 打印所有工作表名称
-          console.log("文件中所有工作表:", workbook.SheetNames);
-
           // 查找目标工作表
           let targetSheetName = workbook.SheetNames[0];
           if (sheetName) {
@@ -242,11 +247,6 @@ const readExcelFile = async (
             );
             if (foundSheet) {
               targetSheetName = foundSheet;
-              console.log(`找到工作表: "${foundSheet}"`);
-            } else {
-              console.warn(
-                `未找到工作表 "${sheetName}"，使用默认工作表: "${targetSheetName}"`
-              );
             }
           }
 
@@ -271,11 +271,6 @@ const readExcelFile = async (
             );
             if (foundWorksheet) {
               worksheet = foundWorksheet;
-              console.log(`找到工作表: "${foundWorksheet.name}"`);
-            } else {
-              console.warn(
-                `未找到工作表 "${sheetName}"，使用默认工作表: "${worksheet?.name}"`
-              );
             }
           }
 
@@ -287,7 +282,9 @@ const readExcelFile = async (
           worksheet.eachRow(row => {
             const rowData: any[] = [];
             row.eachCell({ includeEmpty: true }, cell => {
-              rowData.push(cell.value);
+              // ExcelJS的col从1开始，转换为0索引
+              const colIndex = Number(cell.col) - 1;
+              rowData[colIndex] = cell.value;
             });
             rows.push(rowData);
           });
@@ -321,9 +318,6 @@ const buildHeaderIndexMap = (headers: any[]): Map<string, number> => {
     }
   });
 
-  // 打印实际表头，方便调试
-  console.log("实际表头:", headers);
-
   return map;
 };
 
@@ -349,12 +343,10 @@ const findHeaderIndex = (
       key.includes(normalizedHeader) ||
       normalizedHeader.includes(key)
     ) {
-      console.log(`表头模糊匹配: "${headerName}" -> "${key}" (索引: ${value})`);
       return value;
     }
   }
 
-  console.warn(`未找到表头: "${headerName}"`);
   return undefined;
 };
 
@@ -568,9 +560,6 @@ const handleFlightFileChange = async (uploadFile: any) => {
       transformedData
     };
 
-    console.log("机票表头映射:", Object.fromEntries(headerIndexMap));
-    console.log(`机票数据转换完成，共 ${transformedData.length} 条`);
-
     ElMessage.success(`机票文件上传成功，共 ${transformedData.length} 条数据`);
   } catch (error: any) {
     ElMessage.error(error.message || "读取机票文件失败");
@@ -603,9 +592,6 @@ const handleHotelFileChange = async (uploadFile: any) => {
       data: result.data,
       transformedData
     };
-
-    console.log("酒店表头映射:", Object.fromEntries(headerIndexMap));
-    console.log(`酒店数据转换完成，共 ${transformedData.length} 条`);
 
     ElMessage.success(`酒店文件上传成功，共 ${transformedData.length} 条数据`);
   } catch (error: any) {
@@ -651,15 +637,71 @@ const handleCompareNewFileChange = async (uploadFile: any) => {
       data: result.data
     };
 
-    console.log("新表表头:", result.headers);
-    console.log(`新表（国内机票）上传成功，共 ${result.data.length} 条数据`);
-    ElMessage.success(
-      `新表（国内机票）上传成功，共 ${result.data.length} 条数据`
-    );
+    // 尝试读取"酒店"工作表
+    try {
+      const hotelResult = await readExcelFile(file, "酒店");
+      
+      // 酒店名称在G列（索引6），公司支付金额在Q列（索引16），个人支付金额在R列（索引17）
+      const hotelNameIdx = 6; // G列
+      const companyPayIdx = 16; // Q列
+      const personalPayIdx = 17; // R列
+      
+      // 按酒店名称汇总公司支付金额+个人支付金额
+      const hotelSummary = new Map<string, number>();
+      for (const row of hotelResult.data) {
+        const hotelName = String(row[hotelNameIdx] || "").trim();
+        const companyPay = parseFloat(row[companyPayIdx]) || 0;
+        const personalPay = parseFloat(row[personalPayIdx]) || 0;
+        const totalPay = companyPay + personalPay;
+        if (hotelName) {
+          const currentTotal = hotelSummary.get(hotelName) || 0;
+          hotelSummary.set(hotelName, currentTotal + totalPay);
+        }
+      }
+      
+      compareNewHotelData.value = {
+        headers: hotelResult.headers,
+        data: hotelResult.data,
+        summary: hotelSummary
+      };
+      
+      // 调试：打印新表酒店汇总
+      console.log("=== 新表酒店汇总调试 ===");
+      console.log("新表酒店汇总数量:", hotelSummary.size);
+      const newSummaryArray = Array.from(hotelSummary.entries()).map(([name, total]) => ({ hotelName: name, totalAmount: total }));
+      console.log("新表酒店汇总前10条:", newSummaryArray.slice(0, 10));
+      
+      // 打印所有包含"悦时光"的酒店（详细显示每个字符）
+      const newYueshiguangList = newSummaryArray.filter(item => item.hotelName.includes("悦时光"));
+      console.log("新表包含'悦时光'的酒店:", newYueshiguangList);
+      if (newYueshiguangList.length > 0) {
+        console.log("第一个悦时光酒店的字符编码:", newYueshiguangList[0].hotelName.split("").map(c => c.charCodeAt(0)));
+      }
+      
+      // 打印悦时光精品酒店的汇总
+      const newYueshiguang = hotelSummary.get("悦时光精品酒店(漯河东兴电子产业城店)");
+      console.log("新表 悦时光精品酒店(漯河东兴电子产业城店) 汇总金额:", newYueshiguang);
+      
+      // 打印原始数据中的前10行酒店名称（G列）
+      console.log("=== 新表原始数据前10行G列（酒店名称）===");
+      for (let i = 0; i < Math.min(10, hotelResult.data.length); i++) {
+        console.log(`第${i + 1}行 G列:`, hotelResult.data[i][6], "Q列:", hotelResult.data[i][16]);
+      }
+      
+      ElMessage.success(
+        `新表上传成功，国内机票 ${result.data.length} 条，酒店 ${hotelResult.data.length} 条（汇总 ${hotelSummary.size} 个酒店）`
+      );
+    } catch (e) {
+      compareNewHotelData.value = null;
+      ElMessage.success(
+        `新表（国内机票）上传成功，共 ${result.data.length} 条数据`
+      );
+    }
   } catch (error: any) {
     ElMessage.error(error.message || "读取新表文件失败");
     compareNewFile.value = null;
     compareNewData.value = null;
+    compareNewHotelData.value = null;
   } finally {
     compareNewLoading.value = false;
   }
@@ -680,7 +722,6 @@ const handleCompareTmcFileChange = async (uploadFile: any) => {
       headers: chupiaoResult.headers,
       data: chupiaoResult.data
     };
-    console.log(`TMC出票工作表上传成功，共 ${chupiaoResult.data.length} 条数据`);
 
     // 读取"改签"工作表
     try {
@@ -689,9 +730,7 @@ const handleCompareTmcFileChange = async (uploadFile: any) => {
         headers: gaiqianResult.headers,
         data: gaiqianResult.data
       };
-      console.log(`TMC改签工作表上传成功，共 ${gaiqianResult.data.length} 条数据`);
     } catch (e) {
-      console.warn("未找到改签工作表");
       tmcGaiqianData.value = null;
     }
 
@@ -702,9 +741,7 @@ const handleCompareTmcFileChange = async (uploadFile: any) => {
         headers: tuipiaoResult.headers,
         data: tuipiaoResult.data
       };
-      console.log(`TMC退票工作表上传成功，共 ${tuipiaoResult.data.length} 条数据`);
     } catch (e) {
-      console.warn("未找到退票工作表");
       tmcTuipiaoData.value = null;
     }
 
@@ -721,6 +758,76 @@ const handleCompareTmcFileChange = async (uploadFile: any) => {
   }
 };
 
+// 规范化酒店名称（统一括号类型，去除空格和特殊字符）
+const normalizeHotelName = (name: string): string => {
+  return name
+    .replace(/[（(]/g, "(")  // 统一左括号为英文
+    .replace(/[）)]/g, ")")  // 统一右括号为英文
+    .replace(/[·•\-—_]/g, "") // 去除分隔符
+    .replace(/\s+/g, "")     // 去除空格
+    .trim();
+};
+
+// 计算两个字符串的相似度（基于Levenshtein距离）
+const calculateSimilarity = (str1: string, str2: string): number => {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  
+  if (len1 === 0 && len2 === 0) return 1;
+  if (len1 === 0 || len2 === 0) return 0;
+  
+  // 使用动态规划计算编辑距离
+  const dp: number[][] = [];
+  for (let i = 0; i <= len1; i++) {
+    dp[i] = [];
+    dp[i][0] = i;
+  }
+  for (let j = 0; j <= len2; j++) {
+    dp[0][j] = j;
+  }
+  
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,      // 删除
+        dp[i][j - 1] + 1,      // 插入
+        dp[i - 1][j - 1] + cost // 替换
+      );
+    }
+  }
+  
+  const editDistance = dp[len1][len2];
+  const maxLen = Math.max(len1, len2);
+  return (maxLen - editDistance) / maxLen;
+};
+
+// 根据相似度查找最佳匹配的酒店
+const findBestMatch = (
+  targetName: string,
+  hotelMap: Map<string, { originalName: string; amount: number }>,
+  threshold: number = 0.9
+): { normalizedName: string; data: { originalName: string; amount: number } } | null => {
+  const normalizedTarget = normalizeHotelName(targetName);
+  
+  // 先尝试完全匹配
+  if (hotelMap.has(normalizedTarget)) {
+    return { normalizedName: normalizedTarget, data: hotelMap.get(normalizedTarget)! };
+  }
+  
+  // 相似度匹配
+  let bestMatch: { normalizedName: string; data: { originalName: string; amount: number }; similarity: number } | null = null;
+  
+  for (const [normalizedName, data] of hotelMap.entries()) {
+    const similarity = calculateSimilarity(normalizedTarget, normalizedName);
+    if (similarity >= threshold && (!bestMatch || similarity > bestMatch.similarity)) {
+      bestMatch = { normalizedName, data, similarity };
+    }
+  }
+  
+  return bestMatch ? { normalizedName: bestMatch.normalizedName, data: bestMatch.data } : null;
+};
+
 // 处理酒店系统文件上传
 const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
   const file = uploadFile.raw;
@@ -730,16 +837,75 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
 
   compareHotelSystemLoading.value = true;
   try {
-    const result = await readExcelFile(file);
+    // 读取"酒店明细(国内)"工作表
+    const result = await readExcelFile(file, "酒店明细(国内)");
+    
+    // V列是酒店名称（索引21），AG列是应付金额（索引32）
+    const hotelNameIdx = 21; // V列
+    const amountIdx = 32; // AG列
+    
+    // 调试：打印前10行的V列和AG列数据
+    console.log("=== 酒店系统文件调试 ===");
+    console.log("V列(索引21)酒店名称, AG列(索引32)应付金额");
+    console.log("总行数:", result.data.length);
+    
+    // 先按原始名称初步汇总
+    const rawSummary = new Map<string, number>();
+    for (const row of result.data) {
+      const hotelName = String(row[hotelNameIdx] || "").trim();
+      const amount = parseFloat(row[amountIdx]) || 0;
+      if (hotelName) {
+        const currentTotal = rawSummary.get(hotelName) || 0;
+        rawSummary.set(hotelName, currentTotal + amount);
+      }
+    }
+    
+    // 暂时注释相似度合并逻辑
+    // // 使用相似度合并相似的酒店名称
+    // const hotelSummary = new Map<string, number>();
+    // const mergedNames = new Map<string, string>(); // 记录每个酒店名合并到哪个规范化名称
+    // 
+    // for (const [hotelName, amount] of rawSummary.entries()) {
+    //   const normalizedName = normalizeHotelName(hotelName);
+    //   
+    //   // 检查是否已有相似的酒店
+    //   let foundMatch = false;
+    //   for (const [existingName, existingAmount] of hotelSummary.entries()) {
+    //     const existingNormalized = normalizeHotelName(existingName);
+    //     const similarity = calculateSimilarity(normalizedName, existingNormalized);
+    //     
+    //     if (similarity >= 0.9) {
+    //       // 合并到现有酒店
+    //       hotelSummary.set(existingName, existingAmount + amount);
+    //       mergedNames.set(hotelName, existingName);
+    //       foundMatch = true;
+    //       break;
+    //     }
+    //   }
+    //   
+    //   if (!foundMatch) {
+    //     hotelSummary.set(hotelName, amount);
+    //     mergedNames.set(hotelName, hotelName);
+    //   }
+    // }
+    
+    // 直接使用原始汇总结果（不合并相似酒店）
+    const hotelSummary = rawSummary;
+    
+    console.log("=== 汇总结果 ===");
+    console.log("酒店数量:", hotelSummary.size);
+    // 打印汇总结果
+    const summaryArray = Array.from(hotelSummary.entries()).map(([name, total]) => ({ hotelName: name, totalAmount: total }));
+    console.log("汇总数据:", summaryArray.slice(0, 10));
 
     compareHotelSystemFile.value = file;
     compareHotelSystemData.value = {
       headers: result.headers,
-      data: result.data
+      data: result.data,
+      summary: hotelSummary
     };
 
-    console.log(`酒店系统文件上传成功，共 ${result.data.length} 条数据`);
-    ElMessage.success(`酒店系统文件上传成功，共 ${result.data.length} 条数据`);
+    ElMessage.success(`酒店系统文件上传成功，共 ${result.data.length} 条数据（汇总 ${hotelSummary.size} 个酒店）`);
   } catch (error: any) {
     ElMessage.error(error.message || "读取酒店系统文件失败");
     compareHotelSystemFile.value = null;
@@ -753,6 +919,7 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
 const clearCompareNewFile = () => {
   compareNewFile.value = null;
   compareNewData.value = null;
+  compareNewHotelData.value = null;
   showCompareResult.value = false;
   compareResult.value = [];
 };
@@ -771,8 +938,8 @@ const clearCompareTmcFile = () => {
 const clearCompareHotelSystemFile = () => {
   compareHotelSystemFile.value = null;
   compareHotelSystemData.value = null;
-  showCompareResult.value = false;
-  compareResult.value = [];
+  showHotelCompareResult.value = false;
+  hotelCompareResult.value = [];
 };
 
 // 在数组中查找表头索引（优先精确匹配，再模糊匹配）
@@ -850,6 +1017,222 @@ const compareAllData = () => {
   }
 };
 
+// 酒店对比函数
+const compareHotelData = () => {
+  if (!compareNewHotelData.value?.summary) {
+    ElMessage.warning("请先上传新表（包含酒店工作表）");
+    return;
+  }
+  if (!compareHotelSystemData.value?.summary) {
+    ElMessage.warning("请先上传酒店系统文件");
+    return;
+  }
+
+  hotelComparing.value = true;
+  hotelCompareResult.value = [];
+
+  try {
+    const newSummary = compareNewHotelData.value.summary;
+    const systemSummary = compareHotelSystemData.value.summary;
+    
+    // 将两个汇总都转换为规范化名称的Map
+    const normalizedNewSummary = new Map<string, { originalName: string; amount: number }>();
+    for (const [name, amount] of newSummary.entries()) {
+      const normalizedName = normalizeHotelName(name);
+      normalizedNewSummary.set(normalizedName, { originalName: name, amount });
+    }
+    
+    const normalizedSystemSummary = new Map<string, { originalName: string; amount: number }>();
+    for (const [name, amount] of systemSummary.entries()) {
+      const normalizedName = normalizeHotelName(name);
+      normalizedSystemSummary.set(normalizedName, { originalName: name, amount });
+    }
+    
+    const results: { hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[] = [];
+    const matchedSystemHotels = new Set<string>(); // 记录已匹配的酒店系统酒店
+    
+    // 收集"新表有酒店系统无"和"酒店系统有新表无"的记录，用于后续金额匹配
+    const newOnlyItems: { hotelName: string; amount: number }[] = [];
+    const systemOnlyItems: { hotelName: string; amount: number }[] = [];
+
+    // 找出新表有但酒店系统没有的酒店（暂时注释相似度匹配，使用精确匹配）
+    for (const [normalizedName, newData] of normalizedNewSummary.entries()) {
+      // const matchResult = findBestMatch(newData.originalName, normalizedSystemSummary, 0.9);
+      
+      // 使用精确匹配（规范化后的名称）
+      const systemData = normalizedSystemSummary.get(normalizedName);
+      
+      if (systemData === undefined) {
+        // 没有找到匹配，先收集起来
+        newOnlyItems.push({
+          hotelName: newData.originalName,
+          amount: newData.amount
+        });
+      } else {
+        // 找到匹配，记录已匹配
+        matchedSystemHotels.add(normalizedName);
+        
+        if (Math.abs(newData.amount - systemData.amount) > 0.01) {
+          results.push({
+            hotelName: `${newData.originalName} / ${systemData.originalName}`,
+            newAmount: newData.amount,
+            systemAmount: systemData.amount,
+            diff: Math.abs(newData.amount - systemData.amount),
+            remark: "金额不匹配"
+          });
+        }
+      }
+    }
+
+    // 收集酒店系统有但新表没有的酒店
+    for (const [normalizedName, systemData] of normalizedSystemSummary.entries()) {
+      if (!matchedSystemHotels.has(normalizedName)) {
+        systemOnlyItems.push({
+          hotelName: systemData.originalName,
+          amount: systemData.amount
+        });
+      }
+    }
+    
+    // 尝试按金额匹配"新表有酒店系统无"和"酒店系统有新表无"的记录
+    const matchedNewOnly = new Set<number>();
+    const matchedSystemOnly = new Set<number>();
+    
+    // 收集"金额相同需人工确认"的记录
+    const amountMatchResults: { hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[] = [];
+    
+    for (let i = 0; i < newOnlyItems.length; i++) {
+      const newItem = newOnlyItems[i];
+      for (let j = 0; j < systemOnlyItems.length; j++) {
+        if (matchedSystemOnly.has(j)) continue;
+        const systemItem = systemOnlyItems[j];
+        
+        // 金额相同（允许0.01的误差）
+        if (Math.abs(newItem.amount - systemItem.amount) < 0.01) {
+          amountMatchResults.push({
+            hotelName: `${newItem.hotelName} / ${systemItem.hotelName}`,
+            newAmount: newItem.amount,
+            systemAmount: systemItem.amount,
+            diff: 0,
+            remark: "金额相同需人工确认"
+          });
+          matchedNewOnly.add(i);
+          matchedSystemOnly.add(j);
+          break;
+        }
+      }
+    }
+    
+    // 收集未匹配的"新表有酒店系统无"和"酒店系统有新表无"记录
+    const unmatchedNewOnly: { hotelName: string; amount: number }[] = [];
+    const unmatchedSystemOnly: { hotelName: string; amount: number }[] = [];
+    
+    for (let i = 0; i < newOnlyItems.length; i++) {
+      if (!matchedNewOnly.has(i)) {
+        unmatchedNewOnly.push(newOnlyItems[i]);
+      }
+    }
+    
+    for (let j = 0; j < systemOnlyItems.length; j++) {
+      if (!matchedSystemOnly.has(j)) {
+        unmatchedSystemOnly.push(systemOnlyItems[j]);
+      }
+    }
+    
+    // 智能排序：对"金额不匹配"的记录，查找差额对应的记录
+    const usedNewOnly = new Set<number>();
+    const usedSystemOnly = new Set<number>();
+    const sortedResults: { hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[] = [];
+    
+    for (const result of results) {
+      if (result.remark !== "金额不匹配") continue;
+      
+      sortedResults.push(result);
+      
+      const diff = result.diff; // 差额（新表 - 酒店系统）
+      
+      if (result.newAmount > result.systemAmount) {
+        // 新表 > 酒店系统，差额为正
+        // 查找"酒店系统有新表无"中金额等于差额的记录
+        for (let i = 0; i < unmatchedSystemOnly.length; i++) {
+          if (usedSystemOnly.has(i)) continue;
+          if (Math.abs(unmatchedSystemOnly[i].amount - diff) < 0.01) {
+            sortedResults.push({
+              hotelName: unmatchedSystemOnly[i].hotelName,
+              newAmount: 0,
+              systemAmount: unmatchedSystemOnly[i].amount,
+              diff: unmatchedSystemOnly[i].amount,
+              remark: "酒店系统有新表无（差额匹配）"
+            });
+            usedSystemOnly.add(i);
+            break;
+          }
+        }
+      } else if (result.newAmount < result.systemAmount) {
+        // 新表 < 酒店系统，差额为负（酒店系统多）
+        // 查找"新表有酒店系统无"中金额等于差额的记录
+        for (let i = 0; i < unmatchedNewOnly.length; i++) {
+          if (usedNewOnly.has(i)) continue;
+          if (Math.abs(unmatchedNewOnly[i].amount - diff) < 0.01) {
+            sortedResults.push({
+              hotelName: unmatchedNewOnly[i].hotelName,
+              newAmount: unmatchedNewOnly[i].amount,
+              systemAmount: 0,
+              diff: unmatchedNewOnly[i].amount,
+              remark: "新表有酒店系统无（差额匹配）"
+            });
+            usedNewOnly.add(i);
+            break;
+          }
+        }
+      }
+    }
+    
+    // 添加"金额相同需人工确认"的记录
+    sortedResults.push(...amountMatchResults);
+    
+    // 添加剩余未匹配的"新表有酒店系统无"记录
+    for (let i = 0; i < unmatchedNewOnly.length; i++) {
+      if (!usedNewOnly.has(i)) {
+        sortedResults.push({
+          hotelName: unmatchedNewOnly[i].hotelName,
+          newAmount: unmatchedNewOnly[i].amount,
+          systemAmount: 0,
+          diff: unmatchedNewOnly[i].amount,
+          remark: "新表有酒店系统无"
+        });
+      }
+    }
+    
+    // 添加剩余未匹配的"酒店系统有新表无"记录
+    for (let i = 0; i < unmatchedSystemOnly.length; i++) {
+      if (!usedSystemOnly.has(i)) {
+        sortedResults.push({
+          hotelName: unmatchedSystemOnly[i].hotelName,
+          newAmount: 0,
+          systemAmount: unmatchedSystemOnly[i].amount,
+          diff: unmatchedSystemOnly[i].amount,
+          remark: "酒店系统有新表无"
+        });
+      }
+    }
+
+    hotelCompareResult.value = sortedResults;
+    showHotelCompareResult.value = true;
+
+    if (results.length > 0) {
+      ElMessage.success(`酒店对比完成，发现 ${results.length} 条差异`);
+    } else {
+      ElMessage.success("酒店对比完成，数据完全匹配");
+    }
+  } catch (error) {
+    console.error("酒店对比失败:", error);
+    ElMessage.error("酒店对比失败");
+  } finally {
+    hotelComparing.value = false;
+  }
+};
+
 // 出票对比核心逻辑（返回结果）
 const doCompareChupiao = (): CompareResultItem[] => {
   let newTableHeaders = compareNewData.value!.headers;
@@ -881,18 +1264,6 @@ const doCompareChupiao = (): CompareResultItem[] => {
 
   const tmcTicketNoIdx = findHeaderIndexByKeyword(tmcHeaders, ["全票号"]);
   const tmcAmountIdx = findHeaderIndexByKeyword(tmcHeaders, ["应收金额", "金额"]);
-
-  // 调试：打印TMC出票表头匹配结果
-  console.log("=== TMC出票表头匹配调试 ===");
-  console.log("TMC出票表头:", JSON.stringify(tmcHeaders));
-  console.log("找到的全票号列索引:", tmcTicketNoIdx, "列名:", tmcHeaders[tmcTicketNoIdx]);
-  console.log("找到的金额列索引:", tmcAmountIdx, "列名:", tmcHeaders[tmcAmountIdx]);
-  console.log("新表员工自付列索引:", newSelfPayIdx, "列名:", newSelfPayIdx >= 0 ? newTableHeaders[newSelfPayIdx] : "未找到");
-  if (tmcData.length > 0) {
-    console.log("TMC出票第一行数据:", JSON.stringify(tmcData[0]));
-    console.log("TMC出票第一行票号值:", tmcData[0][tmcTicketNoIdx]);
-    console.log("TMC出票第一行金额值:", tmcData[0][tmcAmountIdx]);
-  }
 
   if (newTicketNoIdx === -1 || newAmountIdx === -1 || tmcTicketNoIdx === -1 || tmcAmountIdx === -1) {
     return [];
@@ -987,17 +1358,6 @@ const doCompareGaiqian = (): CompareResultItem[] => {
   const tmcTicketNoIdx = findHeaderIndexByKeyword(tmcHeaders, ["票号"]);
   const tmcGaiqianfeiIdx = findHeaderIndexByKeyword(tmcHeaders, ["客户改签费用", "改签费用", "改签费"]);
 
-  // 调试：打印TMC改签表头匹配结果
-  console.log("=== TMC改签表头匹配调试 ===");
-  console.log("TMC改签表头:", JSON.stringify(tmcHeaders));
-  console.log("找到的票号列索引:", tmcTicketNoIdx, "列名:", tmcHeaders[tmcTicketNoIdx]);
-  console.log("找到的改签费用列索引:", tmcGaiqianfeiIdx, "列名:", tmcHeaders[tmcGaiqianfeiIdx]);
-  if (tmcData.length > 0) {
-    console.log("TMC改签第一行数据:", JSON.stringify(tmcData[0]));
-    console.log("TMC改签第一行票号值:", tmcData[0][tmcTicketNoIdx]);
-    console.log("TMC改签第一行改签费用值:", tmcData[0][tmcGaiqianfeiIdx]);
-  }
-
   if (newTicketNoIdx === -1 || newAmountIdx === -1 || tmcTicketNoIdx === -1 || tmcGaiqianfeiIdx === -1) {
     return [];
   }
@@ -1026,14 +1386,11 @@ const doCompareGaiqian = (): CompareResultItem[] => {
   for (const row of tmcData) {
     const ticketNo = String(row[tmcTicketNoIdx] || "").trim();
     const amount = parseFloat(row[tmcGaiqianfeiIdx]) || 0;
-    // 调试：打印TMC改签数据
-    console.log(`TMC改签数据: 票号=${ticketNo}, 改签费用=${amount}`);
     if (ticketNo && amount > 0) {
       const normalizedNo = normalizeTicketNo(ticketNo);
       tmcMap.set(normalizedNo, { originalTicketNo: ticketNo, amount, row });
     }
   }
-  console.log(`TMC改签Map中共有 ${tmcMap.size} 条数据（金额>0）`);
 
   const results: CompareResultItem[] = [];
   const matchedTicketNos = new Set<string>();
@@ -1250,6 +1607,107 @@ const exportCompareResult = async () => {
     const link = document.createElement("a");
     link.href = url;
     link.download = `对比结果_${new Date().toLocaleDateString().replace(/\//g, "-")}.xlsx`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    ElMessage.success("导出成功");
+  } catch (error) {
+    console.error("导出失败:", error);
+    ElMessage.error("导出失败");
+  }
+};
+
+// 导出酒店对比结果
+const exportHotelCompareResult = async () => {
+  if (hotelCompareResult.value.length === 0) {
+    ElMessage.warning("没有可导出的酒店对比结果");
+    return;
+  }
+
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("酒店对比结果");
+
+    // 添加表头
+    worksheet.columns = [
+      { header: "酒店名称", key: "hotelName", width: 30 },
+      { header: "新表金额", key: "newAmount", width: 15 },
+      { header: "酒店系统金额", key: "systemAmount", width: 15 },
+      { header: "差额", key: "diff", width: 12 },
+      { header: "备注", key: "remark", width: 18 }
+    ];
+
+    // 添加数据
+    for (const item of hotelCompareResult.value) {
+      worksheet.addRow({
+        hotelName: item.hotelName,
+        newAmount: item.newAmount.toFixed(2),
+        systemAmount: item.systemAmount.toFixed(2),
+        diff: item.diff.toFixed(2),
+        remark: item.remark
+      });
+    }
+
+    // 设置表头样式
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 22;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF90EE90" }
+      };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+      };
+    });
+
+    // 设置数据行样式
+    for (let i = 2; i <= worksheet.rowCount; i++) {
+      const row = worksheet.getRow(i);
+      const remark = worksheet.getCell(i, 5).value;
+
+      // 根据备注设置背景色
+      let bgColor = "FFFFFFFF";
+      if (remark === "金额不匹配") {
+        bgColor = "FFFFEBEE"; // 浅红色
+      } else if (remark === "新表有酒店系统无") {
+        bgColor = "FFE3F2FD"; // 浅蓝色
+      } else if (remark === "酒店系统有新表无") {
+        bgColor = "FFFFF3E0"; // 浅橙色
+      }
+
+      row.height = 20;
+      row.eachCell((cell) => {
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" }
+        };
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: bgColor }
+        };
+      });
+    }
+
+    // 生成并下载文件
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `酒店对比结果_${new Date().toLocaleDateString().replace(/\//g, "-")}.xlsx`;
     link.click();
     URL.revokeObjectURL(url);
 
@@ -1887,7 +2345,16 @@ const resetAll = () => {
         :disabled="!compareNewData || !tmcChupiaoData"
         @click="compareAllData"
       >
-        {{ comparing ? "对比中..." : "开始对比" }}
+        {{ comparing ? "对比中..." : "机票对比" }}
+      </el-button>
+      <el-button
+        type="success"
+        size="large"
+        :loading="hotelComparing"
+        :disabled="!compareNewHotelData?.summary || !compareHotelSystemData?.summary"
+        @click="compareHotelData"
+      >
+        {{ hotelComparing ? "对比中..." : "酒店对比" }}
       </el-button>
     </div>
 
@@ -1941,6 +2408,103 @@ const resetAll = () => {
         </el-table>
       </el-card>
     </div>
+
+    <!-- 酒店对比结果 -->
+    <div
+      v-if="showHotelCompareResult && hotelCompareResult.length > 0"
+      class="compare-result"
+    >
+      <el-card>
+        <template #header>
+          <div class="card-header">
+            <span>酒店对比结果</span>
+            <span class="result-count"
+              >共 {{ hotelCompareResult.length }} 条差异</span
+            >
+            <div class="header-actions">
+              <el-button type="primary" size="small" @click="exportHotelCompareResult">
+                导出结果
+              </el-button>
+              <el-button type="success" size="small" @click="hotelCompareFullscreen = true">
+                全屏查看
+              </el-button>
+            </div>
+          </div>
+        </template>
+
+        <el-table :data="hotelCompareResult" border stripe max-height="400">
+          <el-table-column prop="hotelName" label="酒店名称" min-width="200" />
+          <el-table-column prop="newAmount" label="新表金额" min-width="120">
+            <template #default="{ row }">
+              {{ row.newAmount.toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="systemAmount" label="酒店系统金额" min-width="120">
+            <template #default="{ row }">
+              {{ row.systemAmount.toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="diff" label="差额" min-width="100">
+            <template #default="{ row }">
+              <span :style="{ color: row.diff > 0 ? '#F56C6C' : '#67C23A' }">
+                {{ row.diff.toFixed(2) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注" min-width="140">
+            <template #default="{ row }">
+              <el-tag :type="row.remark === '金额不匹配' ? 'danger' : row.remark === '新表有酒店系统无' ? 'info' : 'warning'">
+                {{ row.remark }}
+              </el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+    </div>
+
+    <!-- 酒店对比结果全屏弹窗 -->
+    <el-dialog
+      v-model="hotelCompareFullscreen"
+      title="酒店对比结果"
+      fullscreen
+      :close-on-click-modal="false"
+    >
+      <div class="fullscreen-content">
+        <div class="fullscreen-toolbar">
+          <span class="result-count">共 {{ hotelCompareResult.length }} 条差异</span>
+          <el-button type="primary" size="small" @click="exportHotelCompareResult">
+            导出结果
+          </el-button>
+        </div>
+        <el-table :data="hotelCompareResult" border stripe height="calc(100vh - 180px)">
+          <el-table-column prop="hotelName" label="酒店名称" min-width="250" fixed />
+          <el-table-column prop="newAmount" label="新表金额" min-width="120">
+            <template #default="{ row }">
+              {{ row.newAmount.toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="systemAmount" label="酒店系统金额" min-width="120">
+            <template #default="{ row }">
+              {{ row.systemAmount.toFixed(2) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="diff" label="差额" min-width="100">
+            <template #default="{ row }">
+              <span :style="{ color: row.diff > 0 ? '#F56C6C' : '#67C23A' }">
+                {{ row.diff.toFixed(2) }}
+              </span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注" min-width="180">
+            <template #default="{ row }">
+              <el-tag :type="row.remark === '金额不匹配' ? 'danger' : row.remark === '新表有酒店系统无' ? 'info' : 'warning'">
+                {{ row.remark }}
+              </el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -2082,5 +2646,16 @@ const resetAll = () => {
 .result-count {
   font-size: 14px;
   color: #909399;
+}
+
+.fullscreen-content {
+  height: 100%;
+}
+
+.fullscreen-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
 }
 </style>
