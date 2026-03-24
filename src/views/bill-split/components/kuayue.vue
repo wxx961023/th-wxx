@@ -840,13 +840,40 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
     // 读取"酒店明细(国内)"工作表
     const result = await readExcelFile(file, "酒店明细(国内)");
     
-    // V列是酒店名称（索引21），AG列是应付金额（索引32）
-    const hotelNameIdx = 21; // V列
-    const amountIdx = 32; // AG列
-    
-    // 调试：打印前10行的V列和AG列数据
+    // 根据第三行表头动态查找"酒店名称"列索引（第三行 = result.data[1]）
+    const thirdRowHeader = result.data[1];
+    let hotelNameIdx = -1;
+    if (thirdRowHeader && Array.isArray(thirdRowHeader)) {
+      for (let i = 0; i < thirdRowHeader.length; i++) {
+        const headerName = String(thirdRowHeader[i] || "").trim();
+        if (headerName === "酒店名称") {
+          hotelNameIdx = i;
+          break;
+        }
+      }
+    }
+    if (hotelNameIdx === -1) {
+      throw new Error("在第三行表头中未找到'酒店名称'列");
+    }
+
+    // 同样方式查找"应付金额"列索引
+    let amountIdx = -1;
+    if (thirdRowHeader && Array.isArray(thirdRowHeader)) {
+      for (let i = 0; i < thirdRowHeader.length; i++) {
+        const headerName = String(thirdRowHeader[i] || "").trim();
+        if (headerName === "应付金额") {
+          amountIdx = i;
+          break;
+        }
+      }
+    }
+    if (amountIdx === -1) {
+      throw new Error("在第三行表头中未找到'应付金额'列");
+    }
+
+    // 调试：打印表头查找结果
     console.log("=== 酒店系统文件调试 ===");
-    console.log("V列(索引21)酒店名称, AG列(索引32)应付金额");
+    console.log(`酒店名称列索引: ${hotelNameIdx}, 应付金额列索引: ${amountIdx}`);
     console.log("总行数:", result.data.length);
     
     // 先按原始名称初步汇总
