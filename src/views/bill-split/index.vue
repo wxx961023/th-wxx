@@ -13,6 +13,7 @@ import XinteBillSplit from "./components/xinte.vue";
 import SzjlBillSplit from "./components/szjl.vue";
 import KuayueBillSplit from "./components/kuayue.vue";
 import JianlangBillSplit from "./components/jianlang.vue";
+import YalianBillSplit from "./components/yalian.vue";
 
 defineOptions({
   name: "BillSplitIndex"
@@ -108,6 +109,12 @@ const selectedComponent = ref<string>("cxjg");
                 <p>适用于坚朗的账单对比处理</p>
               </div>
             </el-radio>
+            <el-radio label="yalian">
+              <div class="component-option">
+                <h4>亚连</h4>
+                <p>适用于亚连的账单拆分处理</p>
+              </div>
+            </el-radio>
           </el-radio-group>
         </el-card>
       </div>
@@ -127,6 +134,7 @@ const selectedComponent = ref<string>("cxjg");
         <SzjlBillSplit v-else-if="selectedComponent === 'szjl'" />
         <KuayueBillSplit v-else-if="selectedComponent === 'kuayue'" />
         <JianlangBillSplit v-else-if="selectedComponent === 'jianlang'" />
+        <YalianBillSplit v-else-if="selectedComponent === 'yalian'" />
       </div>
     </div>
   </div>
