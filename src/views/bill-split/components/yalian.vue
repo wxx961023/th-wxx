@@ -277,8 +277,8 @@ const readSummaryFileForSplit = (file: File) => {
                 const arriveCity = oldRow[arriveCityIdx]?.toString() || "";
                 newRow[6] = departCity && arriveCity ? `${departCity}-${arriveCity}` : "";
               } else if (!isDomestic && itineraryIdx !== undefined) {
-                const itinerary = oldRow[itineraryIdx]?.toString() || "";
-                newRow[6] = extractRouteFromItinerary(itinerary);
+                // 国际机票：直接取航程列的值
+                newRow[6] = oldRow[itineraryIdx]?.toString() || "";
               }
 
               if (!isDomestic) {
