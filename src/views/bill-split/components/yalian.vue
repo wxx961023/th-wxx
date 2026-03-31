@@ -111,13 +111,13 @@ const AMOUNT_COLUMNS = [9, 10, 11, 12, 13, 14, 15, 16];
 // 解析金额值（支持数值和公式格式如 =-1120+735）
 const parseAmountValue = (value: any): number => {
   if (value === null || value === undefined) return 0;
-  
+
   // 如果已经是数值
   if (typeof value === "number") return value;
-  
+
   const str = value.toString().trim();
   if (!str) return 0;
-  
+
   // 如果是公式格式（以=开头）
   if (str.startsWith("=")) {
     try {
@@ -134,7 +134,7 @@ const parseAmountValue = (value: any): number => {
     }
     return 0;
   }
-  
+
   // 普通数值解析
   return parseFloat(str) || 0;
 };
@@ -275,7 +275,7 @@ const readSummaryFileForSplit = (file: File) => {
               if (isDomestic && departCityIdx !== undefined && arriveCityIdx !== undefined) {
                 const departCity = oldRow[departCityIdx]?.toString() || "";
                 const arriveCity = oldRow[arriveCityIdx]?.toString() || "";
-                newRow[6] = departCity && arriveCity ? `${departCity}+${arriveCity}` : "";
+                newRow[6] = departCity && arriveCity ? `${departCity}-${arriveCity}` : "";
               } else if (!isDomestic && itineraryIdx !== undefined) {
                 const itinerary = oldRow[itineraryIdx]?.toString() || "";
                 newRow[6] = extractRouteFromItinerary(itinerary);
@@ -294,7 +294,7 @@ const readSummaryFileForSplit = (file: File) => {
 
               allData.push(newRow);
             }
-            
+
             if (isDomestic) {
               domesticCount = rows.length - 1;
             } else {
@@ -547,7 +547,7 @@ const readCustomerFile = (file: File) => {
       // 第一行是标题，第二行是表头
       const headers = rows[1];
       const headerIndexMap = buildHeaderIndexMap(headers);
-      
+
       // 打印表头信息
       console.log("客户账单表头:", headers);
       console.log("客户账单表头映射:", Object.fromEntries(headerIndexMap));
