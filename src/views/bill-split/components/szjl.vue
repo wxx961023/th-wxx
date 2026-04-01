@@ -72,7 +72,7 @@ const INTERNATIONAL_HEADER_MAPPING: Record<number, string> = {
   8: "舱位类型",
   9: "航班号",
   10: "票面价",
-  11: "税费",  // 民航基金 = 税费
+  11: "税费", // 民航基金 = 税费
   // 12: 燃油税 空
   13: "系统使用费",
   14: "改签费",
@@ -156,10 +156,7 @@ const readWorksheetData = (worksheet: ExcelJS.Worksheet): any[][] => {
 };
 
 // 转换国内机票数据
-const transformDomesticData = (
-  rows: any[][],
-  startIndex: number
-): any[][] => {
+const transformDomesticData = (rows: any[][], startIndex: number): any[][] => {
   const headerIndexMap = buildHeaderIndexMap(rows[0]);
 
   const departDateIdx = headerIndexMap.get("出发日期");
@@ -185,15 +182,18 @@ const transformDomesticData = (
     }
 
     // 起飞时间 = 出发日期 + 出发时间
-    const departDate = departDateIdx !== undefined ? (oldRow[departDateIdx] ?? "") : "";
-    const departTime = departTimeIdx !== undefined ? (oldRow[departTimeIdx] ?? "") : "";
+    const departDate =
+      departDateIdx !== undefined ? (oldRow[departDateIdx] ?? "") : "";
+    const departTime =
+      departTimeIdx !== undefined ? (oldRow[departTimeIdx] ?? "") : "";
     newRow[5] = `${departDate} ${departTime}`.trim();
 
     // 国际/国内 固定"国内"
     newRow[6] = "国内";
 
     // 航程 = 出发城市 + 到达城市
-    const fromCity = fromCityIdx !== undefined ? (oldRow[fromCityIdx] ?? "") : "";
+    const fromCity =
+      fromCityIdx !== undefined ? (oldRow[fromCityIdx] ?? "") : "";
     const toCity = toCityIdx !== undefined ? (oldRow[toCityIdx] ?? "") : "";
     newRow[7] = `${fromCity}-${toCity}`;
 
@@ -222,7 +222,9 @@ const transformIndternationalData = (
     newRow[0] = startIndex + i - 1;
 
     // 根据映射填充数据
-    for (const [newIdx, oldHeader] of Object.entries(INTERNATIONAL_HEADER_MAPPING)) {
+    for (const [newIdx, oldHeader] of Object.entries(
+      INTERNATIONAL_HEADER_MAPPING
+    )) {
       const oldIdx = headerIndexMap.get(oldHeader);
       if (oldIdx !== undefined) {
         newRow[parseInt(newIdx)] = oldRow[oldIdx] ?? "";
@@ -230,7 +232,8 @@ const transformIndternationalData = (
     }
 
     // 起飞时间 = 出发时间
-    newRow[5] = departTimeIdx !== undefined ? (oldRow[departTimeIdx] ?? "") : "";
+    newRow[5] =
+      departTimeIdx !== undefined ? (oldRow[departTimeIdx] ?? "") : "";
 
     // 国际/国内 固定"国际"
     newRow[6] = "国际";
@@ -263,7 +266,10 @@ const readFile = (file: File) => {
       if (domesticSheet) {
         const rows = readWorksheetData(domesticSheet);
         if (rows.length > 1) {
-          const transformedData = transformDomesticData(rows, allData.length + 1);
+          const transformedData = transformDomesticData(
+            rows,
+            allData.length + 1
+          );
           allData.push(...transformedData);
           domesticCount = transformedData.length;
         }
@@ -274,7 +280,10 @@ const readFile = (file: File) => {
       if (internationalSheet) {
         const rows = readWorksheetData(internationalSheet);
         if (rows.length > 1) {
-          const transformedData =            d                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      (rows, allData.length + 1);
+          const transformedData = transformIndternationalData(
+            rows,
+            allData.length + 1
+          );
           allData.push(...transformedData);
           internationalCount = transformedData.length;
         }
@@ -288,11 +297,15 @@ const readFile = (file: File) => {
 
       transformedData.value = allData;
 
-      console.log(`国内机票: ${domesticCount} 条, 国际机票: ${internationalCount} 条, 总计: ${allData.length} 条`);
+      console.log(
+        `国内机票: ${domesticCount} 条, 国际机票: ${internationalCount} 条, 总计: ${allData.length} 条`
+      );
 
       showData.value = true;
       loading.value = false;
-      ElMessage.success(`成功读取文件，国内${domesticCount}条，国际${internationalCount}条，共${allData.length}条数据！`);
+      ElMessage.success(
+        `成功读取文件，国内${domesticCount}条，国际${internationalCount}条，共${allData.length}条数据！`
+      );
     } catch (error) {
       console.error("读取Excel文件失败:", error);
       ElMessage.error("读取Excel文件失败");
