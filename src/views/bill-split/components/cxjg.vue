@@ -6,6 +6,8 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import JSZip from "jszip";
 
+// 导入公司配置
+import companyConfig from "../companyConfig";
 defineOptions({
   name: "BillSplitIndex"
 });
@@ -793,8 +795,6 @@ const applyWorksheetStyling = async (
   });
 };
 
-// 导入公司配置
-import companyConfig from "../companyConfig";
 
 // 生成上个月日期范围字符串（处理上个月的账单）
 const generateCurrentMonthDateRange = (): string => {

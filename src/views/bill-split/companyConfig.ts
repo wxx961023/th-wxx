@@ -1,28 +1,27 @@
 // 公司信息配置文件
 export interface CompanyInfo {
-  shortName: string
-  contact: string
-  phone: string
-  otherFullName?: string
-  worksheetType?: 'all' | 'simple' // 工作表类型
-
+  shortName: string;
+  contact: string;
+  phone: string;
+  otherFullName?: string;
+  worksheetType?: "all" | "simple"; // 工作表类型
 }
 
 export interface PersonInfo {
-  fullName: string // 公司全称
-  shortName: string
-  contact: string
-  phone: string
+  fullName: string; // 公司全称
+  shortName: string;
+  contact: string;
+  phone: string;
 }
 
 export interface CompanyConfig {
-  nameMapping: Record<string, CompanyInfo>
-  getCompanyInfo(fullName: string): CompanyInfo
+  nameMapping: Record<string, CompanyInfo>;
+  getCompanyInfo(fullName: string): CompanyInfo;
 }
 
 export interface PersonConfig {
-  nameMapping: Record<string, PersonInfo>
-  getPersonInfo(personName: string): PersonInfo
+  nameMapping: Record<string, PersonInfo>;
+  getPersonInfo(personName: string): PersonInfo;
 }
 
 const companyConfig: CompanyConfig = {
@@ -78,6 +77,11 @@ const companyConfig: CompanyConfig = {
       shortName: "武汉创鑫激光",
       contact: "黄放",
       phone: "13986152289"
+    },
+    鞍山创鑫激光技术有限公司: {
+      shortName: "鞍山创鑫激光",
+      contact: "葛爽",
+      phone: "13998057875"
     }
   },
 
@@ -89,9 +93,9 @@ const companyConfig: CompanyConfig = {
         contact: "",
         phone: ""
       }
-    )
+    );
   }
-}
+};
 
 // 大梦龙途人员配置
 const personConfig: PersonConfig = {
@@ -126,22 +130,21 @@ const personConfig: PersonConfig = {
         contact: personName,
         phone: ""
       }
-    )
+    );
   }
-}
+};
 
 // 戴德梁行公司配置
 const cushmanWakefieldConfig: CompanyConfig = {
   // 戴德梁行公司名称映射配置
   nameMapping: {
-
     "戴德梁行房地产顾问(深圳)有限公司": {
       shortName: "830039戴德梁行（深圳）-顾问",
       contact: "",
       phone: "",
       worksheetType: "all"
     },
-    "深圳市戴德梁行土地房地产评估有限公司": {
+    深圳市戴德梁行土地房地产评估有限公司: {
       shortName: "830039戴德梁行（深圳）-评估",
       contact: "",
       phone: "",
@@ -159,7 +162,7 @@ const cushmanWakefieldConfig: CompanyConfig = {
       phone: "",
       worksheetType: "all"
     },
-    "深圳市戴德梁行土地房地产评估有限公司厦门分公司": {
+    深圳市戴德梁行土地房地产评估有限公司厦门分公司: {
       shortName: "830039戴德梁行（评估）-厦门分公司",
       contact: "",
       phone: "",
@@ -175,9 +178,9 @@ const cushmanWakefieldConfig: CompanyConfig = {
         contact: "",
         phone: ""
       }
-    )
+    );
   }
-}
+};
 
-export default companyConfig
-export { personConfig, cushmanWakefieldConfig }
+export default companyConfig;
+export { personConfig, cushmanWakefieldConfig };
