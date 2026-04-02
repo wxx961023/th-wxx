@@ -159,7 +159,11 @@ const compareNewFile = ref<File | null>(null);
 const compareNewData = ref<{ headers: any[]; data: any[][] } | null>(null);
 const compareNewLoading = ref(false);
 // 新表酒店数据
-const compareNewHotelData = ref<{ headers: any[]; data: any[][]; summary: Map<string, number> } | null>(null);
+const compareNewHotelData = ref<{
+  headers: any[];
+  data: any[][];
+  summary: Map<string, number>;
+} | null>(null);
 
 // 对比相关 - TMC系统文件（机票）
 const compareTmcFile = ref<File | null>(null);
@@ -171,14 +175,24 @@ const tmcTuipiaoData = ref<{ headers: any[]; data: any[][] } | null>(null);
 
 // 对比相关 - 酒店系统文件
 const compareHotelSystemFile = ref<File | null>(null);
-const compareHotelSystemData = ref<{ headers: any[]; data: any[][]; summary: Map<string, number> } | null>(
-  null
-);
+const compareHotelSystemData = ref<{
+  headers: any[];
+  data: any[][];
+  summary: Map<string, number>;
+} | null>(null);
 const compareHotelSystemLoading = ref(false);
 
 // 酒店比对相关
 const hotelComparing = ref(false);
-const hotelCompareResult = ref<{ hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[]>([]);
+const hotelCompareResult = ref<
+  {
+    hotelName: string;
+    newAmount: number;
+    systemAmount: number;
+    diff: number;
+    remark: string;
+  }[]
+>([]);
 const showHotelCompareResult = ref(false);
 const hotelCompareFullscreen = ref(false);
 
@@ -640,12 +654,12 @@ const handleCompareNewFileChange = async (uploadFile: any) => {
     // 尝试读取"酒店"工作表
     try {
       const hotelResult = await readExcelFile(file, "酒店");
-      
+
       // 酒店名称在G列（索引6），公司支付金额在Q列（索引16），个人支付金额在R列（索引17）
       const hotelNameIdx = 6; // G列
       const companyPayIdx = 16; // Q列
       const personalPayIdx = 17; // R列
-      
+
       // 按酒店名称汇总公司支付金额+个人支付金额
       const hotelSummary = new Map<string, number>();
       for (const row of hotelResult.data) {
@@ -658,36 +672,53 @@ const handleCompareNewFileChange = async (uploadFile: any) => {
           hotelSummary.set(hotelName, currentTotal + totalPay);
         }
       }
-      
+
       compareNewHotelData.value = {
         headers: hotelResult.headers,
         data: hotelResult.data,
         summary: hotelSummary
       };
-      
+
       // 调试：打印新表酒店汇总
       console.log("=== 新表酒店汇总调试 ===");
       console.log("新表酒店汇总数量:", hotelSummary.size);
-      const newSummaryArray = Array.from(hotelSummary.entries()).map(([name, total]) => ({ hotelName: name, totalAmount: total }));
+      const newSummaryArray = Array.from(hotelSummary.entries()).map(
+        ([name, total]) => ({ hotelName: name, totalAmount: total })
+      );
       console.log("新表酒店汇总前10条:", newSummaryArray.slice(0, 10));
-      
+
       // 打印所有包含"悦时光"的酒店（详细显示每个字符）
-      const newYueshiguangList = newSummaryArray.filter(item => item.hotelName.includes("悦时光"));
+      const newYueshiguangList = newSummaryArray.filter(item =>
+        item.hotelName.includes("悦时光")
+      );
       console.log("新表包含'悦时光'的酒店:", newYueshiguangList);
       if (newYueshiguangList.length > 0) {
-        console.log("第一个悦时光酒店的字符编码:", newYueshiguangList[0].hotelName.split("").map(c => c.charCodeAt(0)));
+        console.log(
+          "第一个悦时光酒店的字符编码:",
+          newYueshiguangList[0].hotelName.split("").map(c => c.charCodeAt(0))
+        );
       }
-      
+
       // 打印悦时光精品酒店的汇总
-      const newYueshiguang = hotelSummary.get("悦时光精品酒店(漯河东兴电子产业城店)");
-      console.log("新表 悦时光精品酒店(漯河东兴电子产业城店) 汇总金额:", newYueshiguang);
-      
+      const newYueshiguang = hotelSummary.get(
+        "悦时光精品酒店(漯河东兴电子产业城店)"
+      );
+      console.log(
+        "新表 悦时光精品酒店(漯河东兴电子产业城店) 汇总金额:",
+        newYueshiguang
+      );
+
       // 打印原始数据中的前10行酒店名称（G列）
       console.log("=== 新表原始数据前10行G列（酒店名称）===");
       for (let i = 0; i < Math.min(10, hotelResult.data.length); i++) {
-        console.log(`第${i + 1}行 G列:`, hotelResult.data[i][6], "Q列:", hotelResult.data[i][16]);
+        console.log(
+          `第${i + 1}行 G列:`,
+          hotelResult.data[i][6],
+          "Q列:",
+          hotelResult.data[i][16]
+        );
       }
-      
+
       ElMessage.success(
         `新表上传成功，国内机票 ${result.data.length} 条，酒店 ${hotelResult.data.length} 条（汇总 ${hotelSummary.size} 个酒店）`
       );
@@ -746,7 +777,9 @@ const handleCompareTmcFileChange = async (uploadFile: any) => {
     }
 
     compareTmcFile.value = file;
-    ElMessage.success(`TMC文件上传成功，出票 ${tmcChupiaoData.value.data.length} 条，改签 ${tmcGaiqianData.value?.data?.length || 0} 条，退票 ${tmcTuipiaoData.value?.data?.length || 0} 条`);
+    ElMessage.success(
+      `TMC文件上传成功，出票 ${tmcChupiaoData.value.data.length} 条，改签 ${tmcGaiqianData.value?.data?.length || 0} 条，退票 ${tmcTuipiaoData.value?.data?.length || 0} 条`
+    );
   } catch (error: any) {
     ElMessage.error(error.message || "读取TMC系统文件失败");
     compareTmcFile.value = null;
@@ -761,10 +794,10 @@ const handleCompareTmcFileChange = async (uploadFile: any) => {
 // 规范化酒店名称（统一括号类型，去除空格和特殊字符）
 const normalizeHotelName = (name: string): string => {
   return name
-    .replace(/[（(]/g, "(")  // 统一左括号为英文
-    .replace(/[）)]/g, ")")  // 统一右括号为英文
+    .replace(/[（(]/g, "(") // 统一左括号为英文
+    .replace(/[）)]/g, ")") // 统一右括号为英文
     .replace(/[·•\-—_]/g, "") // 去除分隔符
-    .replace(/\s+/g, "")     // 去除空格
+    .replace(/\s+/g, "") // 去除空格
     .trim();
 };
 
@@ -772,10 +805,10 @@ const normalizeHotelName = (name: string): string => {
 const calculateSimilarity = (str1: string, str2: string): number => {
   const len1 = str1.length;
   const len2 = str2.length;
-  
+
   if (len1 === 0 && len2 === 0) return 1;
   if (len1 === 0 || len2 === 0) return 0;
-  
+
   // 使用动态规划计算编辑距离
   const dp: number[][] = [];
   for (let i = 0; i <= len1; i++) {
@@ -785,18 +818,18 @@ const calculateSimilarity = (str1: string, str2: string): number => {
   for (let j = 0; j <= len2; j++) {
     dp[0][j] = j;
   }
-  
+
   for (let i = 1; i <= len1; i++) {
     for (let j = 1; j <= len2; j++) {
       const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
       dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,      // 删除
-        dp[i][j - 1] + 1,      // 插入
+        dp[i - 1][j] + 1, // 删除
+        dp[i][j - 1] + 1, // 插入
         dp[i - 1][j - 1] + cost // 替换
       );
     }
   }
-  
+
   const editDistance = dp[len1][len2];
   const maxLen = Math.max(len1, len2);
   return (maxLen - editDistance) / maxLen;
@@ -807,25 +840,40 @@ const findBestMatch = (
   targetName: string,
   hotelMap: Map<string, { originalName: string; amount: number }>,
   threshold: number = 0.9
-): { normalizedName: string; data: { originalName: string; amount: number } } | null => {
+): {
+  normalizedName: string;
+  data: { originalName: string; amount: number };
+} | null => {
   const normalizedTarget = normalizeHotelName(targetName);
-  
+
   // 先尝试完全匹配
   if (hotelMap.has(normalizedTarget)) {
-    return { normalizedName: normalizedTarget, data: hotelMap.get(normalizedTarget)! };
+    return {
+      normalizedName: normalizedTarget,
+      data: hotelMap.get(normalizedTarget)!
+    };
   }
-  
+
   // 相似度匹配
-  let bestMatch: { normalizedName: string; data: { originalName: string; amount: number }; similarity: number } | null = null;
-  
+  let bestMatch: {
+    normalizedName: string;
+    data: { originalName: string; amount: number };
+    similarity: number;
+  } | null = null;
+
   for (const [normalizedName, data] of hotelMap.entries()) {
     const similarity = calculateSimilarity(normalizedTarget, normalizedName);
-    if (similarity >= threshold && (!bestMatch || similarity > bestMatch.similarity)) {
+    if (
+      similarity >= threshold &&
+      (!bestMatch || similarity > bestMatch.similarity)
+    ) {
       bestMatch = { normalizedName, data, similarity };
     }
   }
-  
-  return bestMatch ? { normalizedName: bestMatch.normalizedName, data: bestMatch.data } : null;
+
+  return bestMatch
+    ? { normalizedName: bestMatch.normalizedName, data: bestMatch.data }
+    : null;
 };
 
 // 处理酒店系统文件上传
@@ -839,7 +887,7 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
   try {
     // 读取"酒店明细(国内)"工作表
     const result = await readExcelFile(file, "酒店明细(国内)");
-    
+
     // 根据第三行表头动态查找"酒店名称"列索引（第三行 = result.data[1]）
     const thirdRowHeader = result.data[1];
     let hotelNameIdx = -1;
@@ -873,9 +921,11 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
 
     // 调试：打印表头查找结果
     console.log("=== 酒店系统文件调试 ===");
-    console.log(`酒店名称列索引: ${hotelNameIdx}, 应付金额列索引: ${amountIdx}`);
+    console.log(
+      `酒店名称列索引: ${hotelNameIdx}, 应付金额列索引: ${amountIdx}`
+    );
     console.log("总行数:", result.data.length);
-    
+
     // 先按原始名称初步汇总
     const rawSummary = new Map<string, number>();
     for (const row of result.data) {
@@ -886,21 +936,21 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
         rawSummary.set(hotelName, currentTotal + amount);
       }
     }
-    
+
     // 暂时注释相似度合并逻辑
     // // 使用相似度合并相似的酒店名称
     // const hotelSummary = new Map<string, number>();
     // const mergedNames = new Map<string, string>(); // 记录每个酒店名合并到哪个规范化名称
-    // 
+    //
     // for (const [hotelName, amount] of rawSummary.entries()) {
     //   const normalizedName = normalizeHotelName(hotelName);
-    //   
+    //
     //   // 检查是否已有相似的酒店
     //   let foundMatch = false;
     //   for (const [existingName, existingAmount] of hotelSummary.entries()) {
     //     const existingNormalized = normalizeHotelName(existingName);
     //     const similarity = calculateSimilarity(normalizedName, existingNormalized);
-    //     
+    //
     //     if (similarity >= 0.9) {
     //       // 合并到现有酒店
     //       hotelSummary.set(existingName, existingAmount + amount);
@@ -909,20 +959,22 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
     //       break;
     //     }
     //   }
-    //   
+    //
     //   if (!foundMatch) {
     //     hotelSummary.set(hotelName, amount);
     //     mergedNames.set(hotelName, hotelName);
     //   }
     // }
-    
+
     // 直接使用原始汇总结果（不合并相似酒店）
     const hotelSummary = rawSummary;
-    
+
     console.log("=== 汇总结果 ===");
     console.log("酒店数量:", hotelSummary.size);
     // 打印汇总结果
-    const summaryArray = Array.from(hotelSummary.entries()).map(([name, total]) => ({ hotelName: name, totalAmount: total }));
+    const summaryArray = Array.from(hotelSummary.entries()).map(
+      ([name, total]) => ({ hotelName: name, totalAmount: total })
+    );
     console.log("汇总数据:", summaryArray.slice(0, 10));
 
     compareHotelSystemFile.value = file;
@@ -932,7 +984,9 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
       summary: hotelSummary
     };
 
-    ElMessage.success(`酒店系统文件上传成功，共 ${result.data.length} 条数据（汇总 ${hotelSummary.size} 个酒店）`);
+    ElMessage.success(
+      `酒店系统文件上传成功，共 ${result.data.length} 条数据（汇总 ${hotelSummary.size} 个酒店）`
+    );
   } catch (error: any) {
     ElMessage.error(error.message || "读取酒店系统文件失败");
     compareHotelSystemFile.value = null;
@@ -1061,23 +1115,38 @@ const compareHotelData = () => {
   try {
     const newSummary = compareNewHotelData.value.summary;
     const systemSummary = compareHotelSystemData.value.summary;
-    
+
     // 将两个汇总都转换为规范化名称的Map
-    const normalizedNewSummary = new Map<string, { originalName: string; amount: number }>();
+    const normalizedNewSummary = new Map<
+      string,
+      { originalName: string; amount: number }
+    >();
     for (const [name, amount] of newSummary.entries()) {
       const normalizedName = normalizeHotelName(name);
       normalizedNewSummary.set(normalizedName, { originalName: name, amount });
     }
-    
-    const normalizedSystemSummary = new Map<string, { originalName: string; amount: number }>();
+
+    const normalizedSystemSummary = new Map<
+      string,
+      { originalName: string; amount: number }
+    >();
     for (const [name, amount] of systemSummary.entries()) {
       const normalizedName = normalizeHotelName(name);
-      normalizedSystemSummary.set(normalizedName, { originalName: name, amount });
+      normalizedSystemSummary.set(normalizedName, {
+        originalName: name,
+        amount
+      });
     }
-    
-    const results: { hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[] = [];
+
+    const results: {
+      hotelName: string;
+      newAmount: number;
+      systemAmount: number;
+      diff: number;
+      remark: string;
+    }[] = [];
     const matchedSystemHotels = new Set<string>(); // 记录已匹配的酒店系统酒店
-    
+
     // 收集"新表有酒店系统无"和"酒店系统有新表无"的记录，用于后续金额匹配
     const newOnlyItems: { hotelName: string; amount: number }[] = [];
     const systemOnlyItems: { hotelName: string; amount: number }[] = [];
@@ -1085,10 +1154,10 @@ const compareHotelData = () => {
     // 找出新表有但酒店系统没有的酒店（暂时注释相似度匹配，使用精确匹配）
     for (const [normalizedName, newData] of normalizedNewSummary.entries()) {
       // const matchResult = findBestMatch(newData.originalName, normalizedSystemSummary, 0.9);
-      
+
       // 使用精确匹配（规范化后的名称）
       const systemData = normalizedSystemSummary.get(normalizedName);
-      
+
       if (systemData === undefined) {
         // 没有找到匹配，先收集起来
         newOnlyItems.push({
@@ -1098,7 +1167,7 @@ const compareHotelData = () => {
       } else {
         // 找到匹配，记录已匹配
         matchedSystemHotels.add(normalizedName);
-        
+
         if (Math.abs(newData.amount - systemData.amount) > 0.01) {
           results.push({
             hotelName: `${newData.originalName} / ${systemData.originalName}`,
@@ -1112,7 +1181,10 @@ const compareHotelData = () => {
     }
 
     // 收集酒店系统有但新表没有的酒店
-    for (const [normalizedName, systemData] of normalizedSystemSummary.entries()) {
+    for (const [
+      normalizedName,
+      systemData
+    ] of normalizedSystemSummary.entries()) {
       if (!matchedSystemHotels.has(normalizedName)) {
         systemOnlyItems.push({
           hotelName: systemData.originalName,
@@ -1120,20 +1192,26 @@ const compareHotelData = () => {
         });
       }
     }
-    
+
     // 尝试按金额匹配"新表有酒店系统无"和"酒店系统有新表无"的记录
     const matchedNewOnly = new Set<number>();
     const matchedSystemOnly = new Set<number>();
-    
+
     // 收集"金额相同需人工确认"的记录
-    const amountMatchResults: { hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[] = [];
-    
+    const amountMatchResults: {
+      hotelName: string;
+      newAmount: number;
+      systemAmount: number;
+      diff: number;
+      remark: string;
+    }[] = [];
+
     for (let i = 0; i < newOnlyItems.length; i++) {
       const newItem = newOnlyItems[i];
       for (let j = 0; j < systemOnlyItems.length; j++) {
         if (matchedSystemOnly.has(j)) continue;
         const systemItem = systemOnlyItems[j];
-        
+
         // 金额相同（允许0.01的误差）
         if (Math.abs(newItem.amount - systemItem.amount) < 0.01) {
           amountMatchResults.push({
@@ -1149,35 +1227,41 @@ const compareHotelData = () => {
         }
       }
     }
-    
+
     // 收集未匹配的"新表有酒店系统无"和"酒店系统有新表无"记录
     const unmatchedNewOnly: { hotelName: string; amount: number }[] = [];
     const unmatchedSystemOnly: { hotelName: string; amount: number }[] = [];
-    
+
     for (let i = 0; i < newOnlyItems.length; i++) {
       if (!matchedNewOnly.has(i)) {
         unmatchedNewOnly.push(newOnlyItems[i]);
       }
     }
-    
+
     for (let j = 0; j < systemOnlyItems.length; j++) {
       if (!matchedSystemOnly.has(j)) {
         unmatchedSystemOnly.push(systemOnlyItems[j]);
       }
     }
-    
+
     // 智能排序：对"金额不匹配"的记录，查找差额对应的记录
     const usedNewOnly = new Set<number>();
     const usedSystemOnly = new Set<number>();
-    const sortedResults: { hotelName: string; newAmount: number; systemAmount: number; diff: number; remark: string }[] = [];
-    
+    const sortedResults: {
+      hotelName: string;
+      newAmount: number;
+      systemAmount: number;
+      diff: number;
+      remark: string;
+    }[] = [];
+
     for (const result of results) {
       if (result.remark !== "金额不匹配") continue;
-      
+
       sortedResults.push(result);
-      
+
       const diff = result.diff; // 差额（新表 - 酒店系统）
-      
+
       if (result.newAmount > result.systemAmount) {
         // 新表 > 酒店系统，差额为正
         // 查找"酒店系统有新表无"中金额等于差额的记录
@@ -1214,10 +1298,10 @@ const compareHotelData = () => {
         }
       }
     }
-    
+
     // 添加"金额相同需人工确认"的记录
     sortedResults.push(...amountMatchResults);
-    
+
     // 添加剩余未匹配的"新表有酒店系统无"记录
     for (let i = 0; i < unmatchedNewOnly.length; i++) {
       if (!usedNewOnly.has(i)) {
@@ -1230,7 +1314,7 @@ const compareHotelData = () => {
         });
       }
     }
-    
+
     // 添加剩余未匹配的"酒店系统有新表无"记录
     for (let i = 0; i < unmatchedSystemOnly.length; i++) {
       if (!usedSystemOnly.has(i)) {
@@ -1260,6 +1344,13 @@ const compareHotelData = () => {
   }
 };
 
+// 判断是否为全英文票号（如 BJVMAVN）
+const isEnglishTicketNo = (ticketNo: string): boolean => {
+  const cleaned = ticketNo.trim();
+  // 全英文且长度大于3（排除空字符串和短字符）
+  return /^[A-Za-z]+$/.test(cleaned) && cleaned.length > 3;
+};
+
 // 出票对比核心逻辑（返回结果）
 const doCompareChupiao = (): CompareResultItem[] => {
   let newTableHeaders = compareNewData.value!.headers;
@@ -1268,13 +1359,36 @@ const doCompareChupiao = (): CompareResultItem[] => {
   let newTicketNoIdx = findHeaderIndexByKeyword(newTableHeaders, ["票号"]);
   let newAmountIdx = findHeaderIndexByKeyword(newTableHeaders, ["消费金额"]);
   let newSelfPayIdx = findHeaderIndexByKeyword(newTableHeaders, ["员工自付"]);
+  let newGaiqianfeiIdx = findHeaderIndexByKeyword(newTableHeaders, ["改签费"]);
+  // 新增：航班号和登机人/乘机人列索引（用于全英文票号匹配）
+  let newFlightNoIdx = findHeaderIndexByKeyword(newTableHeaders, ["航班号"]);
+  let newPassengerIdx = findHeaderIndexByKeyword(newTableHeaders, [
+    "登机人",
+    "乘机人",
+    "乘客姓名"
+  ]);
 
   if (newTicketNoIdx === -1 || newAmountIdx === -1) {
     if (newTableData.length > 0) {
       const potentialHeaders = newTableData[0];
-      const tempTicketIdx = findHeaderIndexByKeyword(potentialHeaders, ["票号"]);
-      const tempAmountIdx = findHeaderIndexByKeyword(potentialHeaders, ["消费金额"]);
-      const tempSelfPayIdx = findHeaderIndexByKeyword(potentialHeaders, ["员工自付"]);
+      const tempTicketIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "票号"
+      ]);
+      const tempAmountIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "消费金额"
+      ]);
+      const tempSelfPayIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "员工自付"
+      ]);
+      const tempGaiqianfeiIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "改签费"
+      ]);
+      const tempFlightNoIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "航班号"
+      ]);
+      const tempPassengerIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "登机人"
+      ]);
 
       if (tempTicketIdx !== -1 && tempAmountIdx !== -1) {
         newTableHeaders = potentialHeaders;
@@ -1282,17 +1396,37 @@ const doCompareChupiao = (): CompareResultItem[] => {
         newTicketNoIdx = tempTicketIdx;
         newAmountIdx = tempAmountIdx;
         newSelfPayIdx = tempSelfPayIdx;
+        newGaiqianfeiIdx = tempGaiqianfeiIdx;
+        newFlightNoIdx = tempFlightNoIdx;
+        newPassengerIdx = tempPassengerIdx;
       }
     }
   }
+
+  // 过滤：改签费 > 0 的数据不参与出票匹配（应在改签匹配中处理）
+  const newTableDataFiltered = newTableData.filter(row => {
+    const gaiqianfei = newGaiqianfeiIdx >= 0 ? parseFloat(row[newGaiqianfeiIdx]) || 0 : 0;
+    return gaiqianfei === 0;
+  });
 
   const tmcData = tmcChupiaoData.value!.data;
   const tmcHeaders = tmcChupiaoData.value!.headers;
 
   const tmcTicketNoIdx = findHeaderIndexByKeyword(tmcHeaders, ["全票号"]);
-  const tmcAmountIdx = findHeaderIndexByKeyword(tmcHeaders, ["应收金额", "金额"]);
+  const tmcAmountIdx = findHeaderIndexByKeyword(tmcHeaders, [
+    "应收金额",
+    "金额"
+  ]);
+  // 新增：TMC航班号和乘机人列索引
+  const tmcFlightNoIdx = findHeaderIndexByKeyword(tmcHeaders, ["航班号"]);
+  const tmcPassengerIdx = findHeaderIndexByKeyword(tmcHeaders, ["乘机人"]);
 
-  if (newTicketNoIdx === -1 || newAmountIdx === -1 || tmcTicketNoIdx === -1 || tmcAmountIdx === -1) {
+  if (
+    newTicketNoIdx === -1 ||
+    newAmountIdx === -1 ||
+    tmcTicketNoIdx === -1 ||
+    tmcAmountIdx === -1
+  ) {
     return [];
   }
 
@@ -1304,49 +1438,320 @@ const doCompareChupiao = (): CompareResultItem[] => {
     return cleaned;
   };
 
-  // 新表金额 = 消费金额 + 员工自付
-  const newTableMap: Map<string, { originalTicketNo: string; amount: number; consumeAmount: number; selfPay: number; row: any[] }> = new Map();
-  for (const row of newTableData) {
+  // 生成航班号+乘机人的匹配键
+  const generateFlightPassengerKey = (
+    flightNo: string,
+    passenger: string
+  ): string => {
+    return `${flightNo.trim()}_${passenger.trim()}`;
+  };
+
+  // 新表数据 - 按票号和航班号+乘机人两种方式存储
+  const newTableByTicketNo: Map<
+    string,
+    {
+      originalTicketNo: string;
+      amount: number;
+      consumeAmount: number;
+      selfPay: number;
+      row: any[];
+    }
+  > = new Map();
+  // 新表航班号+乘机人Map：值为数组，支持相同航班+乘机人的多条记录
+  const newTableByFlightPassenger: Map<
+    string,
+    {
+      originalTicketNo: string;
+      amount: number;
+      consumeAmount: number;
+      selfPay: number;
+      flightNo: string;
+      passenger: string;
+      row: any[];
+    }[]
+  > = new Map();
+
+  for (const row of newTableDataFiltered) {
     const ticketNo = String(row[newTicketNoIdx] || "").trim();
     const consumeAmount = parseFloat(row[newAmountIdx]) || 0;
-    const selfPay = newSelfPayIdx >= 0 ? (parseFloat(row[newSelfPayIdx]) || 0) : 0;
-    const totalAmount = consumeAmount + selfPay; // 消费金额 + 员工自付
+    const selfPay =
+      newSelfPayIdx >= 0 ? parseFloat(row[newSelfPayIdx]) || 0 : 0;
+    const totalAmount = consumeAmount + selfPay;
+
     if (ticketNo && totalAmount >= 0) {
-      const normalizedNo = normalizeTicketNo(ticketNo);
-      newTableMap.set(normalizedNo, { originalTicketNo: ticketNo, amount: totalAmount, consumeAmount, selfPay, row });
+      // 获取航班号和乘机人信息（所有记录都需要，用于匹配TMC全英文票号）
+      const flightNo = String(row[newFlightNoIdx] || "").trim();
+      const passenger = String(row[newPassengerIdx] || "").trim();
+
+      if (isEnglishTicketNo(ticketNo)) {
+        // 全英文票号：只用航班号+乘机人匹配
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!newTableByFlightPassenger.has(key)) {
+            newTableByFlightPassenger.set(key, []);
+          }
+          newTableByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount: totalAmount,
+            consumeAmount,
+            selfPay,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      } else {
+        // 普通票号：同时存入票号Map和航班号+乘机人Map
+        // 这样可以匹配TMC中的全英文票号记录
+        const normalizedNo = normalizeTicketNo(ticketNo);
+        newTableByTicketNo.set(normalizedNo, {
+          originalTicketNo: ticketNo,
+          amount: totalAmount,
+          consumeAmount,
+          selfPay,
+          row
+        });
+        // 同时也存入航班号+乘机人Map（用于匹配TMC全英文票号）
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!newTableByFlightPassenger.has(key)) {
+            newTableByFlightPassenger.set(key, []);
+          }
+          newTableByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount: totalAmount,
+            consumeAmount,
+            selfPay,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      }
     }
   }
 
-  const tmcMap: Map<string, { originalTicketNo: string; amount: number; row: any[] }> = new Map();
+  // TMC数据 - 按票号和航班号+乘机人两种方式存储
+  const tmcByTicketNo: Map<
+    string,
+    { originalTicketNo: string; amount: number; row: any[] }
+  > = new Map();
+  // TMC航班号+乘机人Map：值为数组，支持相同航班+乘机人的多条记录
+  const tmcByFlightPassenger: Map<
+    string,
+    {
+      originalTicketNo: string;
+      amount: number;
+      flightNo: string;
+      passenger: string;
+      row: any[];
+    }[]
+  > = new Map();
+
   for (const row of tmcData) {
     const ticketNo = String(row[tmcTicketNoIdx] || "").trim();
     const amount = parseFloat(row[tmcAmountIdx]) || 0;
+
     if (ticketNo) {
-      const normalizedNo = normalizeTicketNo(ticketNo);
-      tmcMap.set(normalizedNo, { originalTicketNo: ticketNo, amount, row });
+      // 获取航班号和乘机人信息（所有记录都需要，用于匹配新表全英文票号）
+      const flightNo = String(row[tmcFlightNoIdx] || "").trim();
+      const passenger = String(row[tmcPassengerIdx] || "").trim();
+
+      if (isEnglishTicketNo(ticketNo)) {
+        // 全英文票号：只用航班号+乘机人匹配
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!tmcByFlightPassenger.has(key)) {
+            tmcByFlightPassenger.set(key, []);
+          }
+          tmcByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      } else {
+        // 普通票号：同时存入票号Map和航班号+乘机人Map
+        const normalizedNo = normalizeTicketNo(ticketNo);
+        tmcByTicketNo.set(normalizedNo, {
+          originalTicketNo: ticketNo,
+          amount,
+          row
+        });
+        // 同时也存入航班号+乘机人Map（用于匹配新表全英文票号）
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!tmcByFlightPassenger.has(key)) {
+            tmcByFlightPassenger.set(key, []);
+          }
+          tmcByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      }
     }
   }
 
   const results: CompareResultItem[] = [];
-  const matchedTicketNos = new Set<string>();
+  const matchedKeys = new Set<string>();
+  // 记录已通过航班号+乘机人匹配成功的新表票号（用于过滤脏数据）
+  const matchedNewTableTicketNos = new Set<string>();
+  // 记录已通过航班号+乘机人匹配成功的TMC票号
+  const matchedTmcTicketNos = new Set<string>();
 
-  for (const [normalizedNo, newInfo] of newTableMap) {
-    const tmcInfo = tmcMap.get(normalizedNo);
-    if (tmcInfo) {
-      matchedTicketNos.add(normalizedNo);
-      // 比较：新表(消费金额+员工自付) vs TMC应收金额
-      if (Math.abs(newInfo.amount - tmcInfo.amount) > 0.01) {
-        results.push({ ticketNo: newInfo.originalTicketNo, amount: newInfo.amount.toFixed(2), selfPay: newInfo.selfPay.toFixed(2), systemType: "跨越", dataType: "出票", remark: "出票金额不匹配" });
-        results.push({ ticketNo: tmcInfo.originalTicketNo, amount: tmcInfo.amount.toFixed(2), systemType: "TMC", dataType: "出票", remark: "出票金额不匹配" });
+  // 1. 先执行航班号+乘机人比对
+  for (const [key, newInfoList] of newTableByFlightPassenger) {
+    const tmcInfoList = tmcByFlightPassenger.get(key);
+    if (tmcInfoList && tmcInfoList.length > 0) {
+      matchedKeys.add(`flight_${key}`);
+      // 遍历新表的每条记录
+      for (const newInfo of newInfoList) {
+        matchedNewTableTicketNos.add(newInfo.originalTicketNo);
+        // 在TMC数组中找金额匹配的记录
+        let foundMatch = false;
+        for (const tmcInfo of tmcInfoList) {
+          if (!matchedTmcTicketNos.has(tmcInfo.originalTicketNo)) {
+            if (Math.abs(newInfo.amount - tmcInfo.amount) <= 0.01) {
+              // 金额匹配成功
+              matchedTmcTicketNos.add(tmcInfo.originalTicketNo);
+              foundMatch = true;
+              break;
+            }
+          }
+        }
+        if (!foundMatch) {
+          // 没找到金额匹配的，取第一个未匹配的TMC记录
+          const unmatchedTmc = tmcInfoList.find(
+            t => !matchedTmcTicketNos.has(t.originalTicketNo)
+          );
+          if (unmatchedTmc) {
+            matchedTmcTicketNos.add(unmatchedTmc.originalTicketNo);
+            results.push({
+              ticketNo: `${newInfo.originalTicketNo}(${newInfo.flightNo}/${newInfo.passenger})`,
+              amount: newInfo.amount.toFixed(2),
+              selfPay: newInfo.selfPay.toFixed(2),
+              systemType: "跨越",
+              dataType: "出票",
+              remark: "出票金额不匹配(航班+乘机人)"
+            });
+            results.push({
+              ticketNo: `${unmatchedTmc.originalTicketNo}(${unmatchedTmc.flightNo}/${unmatchedTmc.passenger})`,
+              amount: unmatchedTmc.amount.toFixed(2),
+              systemType: "TMC",
+              dataType: "出票",
+              remark: "出票金额不匹配(航班+乘机人)"
+            });
+          } else {
+            // TMC记录已用完，新表还有记录
+            results.push({
+              ticketNo: `${newInfo.originalTicketNo}(${newInfo.flightNo}/${newInfo.passenger})`,
+              amount: newInfo.amount.toFixed(2),
+              selfPay: newInfo.selfPay.toFixed(2),
+              systemType: "跨越",
+              dataType: "出票",
+              remark: "出票新表有TMC无(航班+乘机人)"
+            });
+          }
+        }
       }
     } else {
-      results.push({ ticketNo: newInfo.originalTicketNo, amount: newInfo.amount.toFixed(2), selfPay: newInfo.selfPay.toFixed(2), systemType: "跨越", dataType: "出票", remark: "出票新表有TMC无" });
+      // TMC没有对应记录，新表所有记录都是"新表有TMC无"
+      for (const newInfo of newInfoList) {
+        results.push({
+          ticketNo: `${newInfo.originalTicketNo}(${newInfo.flightNo}/${newInfo.passenger})`,
+          amount: newInfo.amount.toFixed(2),
+          selfPay: newInfo.selfPay.toFixed(2),
+          systemType: "跨越",
+          dataType: "出票",
+          remark: "出票新表有TMC无(航班+乘机人)"
+        });
+      }
     }
   }
 
-  for (const [normalizedNo, tmcInfo] of tmcMap) {
-    if (!matchedTicketNos.has(normalizedNo)) {
-      results.push({ ticketNo: tmcInfo.originalTicketNo, amount: tmcInfo.amount.toFixed(2), systemType: "TMC", dataType: "出票", remark: "出票TMC有新表无" });
+  // 遍历TMC，找出未匹配的记录
+  for (const [key, tmcInfoList] of tmcByFlightPassenger) {
+    if (!matchedKeys.has(`flight_${key}`)) {
+      // 这个键完全没有被匹配过
+      for (const tmcInfo of tmcInfoList) {
+        results.push({
+          ticketNo: `${tmcInfo.originalTicketNo}(${tmcInfo.flightNo}/${tmcInfo.passenger})`,
+          amount: tmcInfo.amount.toFixed(2),
+          systemType: "TMC",
+          dataType: "出票",
+          remark: "出票TMC有新表无(航班+乘机人)"
+        });
+      }
+    } else {
+      // 键被匹配过，但可能还有未匹配的TMC记录
+      for (const tmcInfo of tmcInfoList) {
+        if (!matchedTmcTicketNos.has(tmcInfo.originalTicketNo)) {
+          results.push({
+            ticketNo: `${tmcInfo.originalTicketNo}(${tmcInfo.flightNo}/${tmcInfo.passenger})`,
+            amount: tmcInfo.amount.toFixed(2),
+            systemType: "TMC",
+            dataType: "出票",
+            remark: "出票TMC有新表无(航班+乘机人)"
+          });
+        }
+      }
+    }
+  }
+
+  // 2. 普通票号比对（过滤掉已通过航班号+乘机人匹配的记录）
+  for (const [normalizedNo, newInfo] of newTableByTicketNo) {
+    // 跳过已通过航班号+乘机人匹配的票号（避免重复比对）
+    if (matchedNewTableTicketNos.has(newInfo.originalTicketNo)) {
+      continue;
+    }
+    const tmcInfo = tmcByTicketNo.get(normalizedNo);
+    if (tmcInfo) {
+      matchedKeys.add(`ticket_${normalizedNo}`);
+      if (Math.abs(newInfo.amount - tmcInfo.amount) > 0.01) {
+        results.push({
+          ticketNo: newInfo.originalTicketNo,
+          amount: newInfo.amount.toFixed(2),
+          selfPay: newInfo.selfPay.toFixed(2),
+          systemType: "跨越",
+          dataType: "出票",
+          remark: "出票金额不匹配"
+        });
+        results.push({
+          ticketNo: tmcInfo.originalTicketNo,
+          amount: tmcInfo.amount.toFixed(2),
+          systemType: "TMC",
+          dataType: "出票",
+          remark: "出票金额不匹配"
+        });
+      }
+    } else {
+      results.push({
+        ticketNo: newInfo.originalTicketNo,
+        amount: newInfo.amount.toFixed(2),
+        selfPay: newInfo.selfPay.toFixed(2),
+        systemType: "跨越",
+        dataType: "出票",
+        remark: "出票新表有TMC无"
+      });
+    }
+  }
+
+  for (const [normalizedNo, tmcInfo] of tmcByTicketNo) {
+    // 跳过已通过票号匹配的，也跳过已通过航班号+乘机人匹配的TMC记录
+    if (!matchedKeys.has(`ticket_${normalizedNo}`) && !matchedTmcTicketNos.has(tmcInfo.originalTicketNo)) {
+      results.push({
+        ticketNo: tmcInfo.originalTicketNo,
+        amount: tmcInfo.amount.toFixed(2),
+        systemType: "TMC",
+        dataType: "出票",
+        remark: "出票TMC有新表无"
+      });
     }
   }
 
@@ -1365,9 +1770,15 @@ const doCompareGaiqian = (): CompareResultItem[] => {
   if (newTicketNoIdx === -1 || newAmountIdx === -1) {
     if (newTableData.length > 0) {
       const potentialHeaders = newTableData[0];
-      const tempTicketIdx = findHeaderIndexByKeyword(potentialHeaders, ["票号"]);
-      const tempAmountIdx = findHeaderIndexByKeyword(potentialHeaders, ["消费金额"]);
-      const tempGaiqianfeiIdx = findHeaderIndexByKeyword(potentialHeaders, ["改签费"]);
+      const tempTicketIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "票号"
+      ]);
+      const tempAmountIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "消费金额"
+      ]);
+      const tempGaiqianfeiIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "改签费"
+      ]);
 
       if (tempTicketIdx !== -1 && tempAmountIdx !== -1) {
         newTableHeaders = potentialHeaders;
@@ -1383,9 +1794,18 @@ const doCompareGaiqian = (): CompareResultItem[] => {
   const tmcHeaders = tmcGaiqianData.value!.headers;
 
   const tmcTicketNoIdx = findHeaderIndexByKeyword(tmcHeaders, ["票号"]);
-  const tmcGaiqianfeiIdx = findHeaderIndexByKeyword(tmcHeaders, ["客户改签费用", "改签费用", "改签费"]);
+  const tmcGaiqianfeiIdx = findHeaderIndexByKeyword(tmcHeaders, [
+    "客户改签费用",
+    "改签费用",
+    "改签费"
+  ]);
 
-  if (newTicketNoIdx === -1 || newAmountIdx === -1 || tmcTicketNoIdx === -1 || tmcGaiqianfeiIdx === -1) {
+  if (
+    newTicketNoIdx === -1 ||
+    newAmountIdx === -1 ||
+    tmcTicketNoIdx === -1 ||
+    tmcGaiqianfeiIdx === -1
+  ) {
     return [];
   }
 
@@ -1397,19 +1817,30 @@ const doCompareGaiqian = (): CompareResultItem[] => {
     return cleaned;
   };
 
-  const newTableMap: Map<string, { originalTicketNo: string; amount: number; row: any[] }> = new Map();
+  const newTableMap: Map<
+    string,
+    { originalTicketNo: string; amount: number; row: any[] }
+  > = new Map();
   for (const row of newTableData) {
     const ticketNo = String(row[newTicketNoIdx] || "").trim();
     const amount = parseFloat(row[newAmountIdx]) || 0;
-    const gaiqianfei = newGaiqianfeiIdx >= 0 ? (parseFloat(row[newGaiqianfeiIdx]) || 0) : 0;
+    const gaiqianfei =
+      newGaiqianfeiIdx >= 0 ? parseFloat(row[newGaiqianfeiIdx]) || 0 : 0;
     // 只有改签费大于0时才参与比对
     if (ticketNo && gaiqianfei > 0) {
       const normalizedNo = normalizeTicketNo(ticketNo);
-      newTableMap.set(normalizedNo, { originalTicketNo: ticketNo, amount, row });
+      newTableMap.set(normalizedNo, {
+        originalTicketNo: ticketNo,
+        amount,
+        row
+      });
     }
   }
 
-  const tmcMap: Map<string, { originalTicketNo: string; amount: number; row: any[] }> = new Map();
+  const tmcMap: Map<
+    string,
+    { originalTicketNo: string; amount: number; row: any[] }
+  > = new Map();
   for (const row of tmcData) {
     const ticketNo = String(row[tmcTicketNoIdx] || "").trim();
     const amount = parseFloat(row[tmcGaiqianfeiIdx]) || 0;
@@ -1427,24 +1858,48 @@ const doCompareGaiqian = (): CompareResultItem[] => {
     if (tmcInfo) {
       matchedTicketNos.add(normalizedNo);
       if (Math.abs(newInfo.amount - tmcInfo.amount) > 0.01) {
-        results.push({ ticketNo: newInfo.originalTicketNo, amount: newInfo.amount.toFixed(2), systemType: "跨越", dataType: "改签", remark: "改签金额不匹配" });
-        results.push({ ticketNo: tmcInfo.originalTicketNo, amount: tmcInfo.amount.toFixed(2), systemType: "TMC", dataType: "改签", remark: "改签金额不匹配" });
+        results.push({
+          ticketNo: newInfo.originalTicketNo,
+          amount: newInfo.amount.toFixed(2),
+          systemType: "跨越",
+          dataType: "改签",
+          remark: "改签金额不匹配"
+        });
+        results.push({
+          ticketNo: tmcInfo.originalTicketNo,
+          amount: tmcInfo.amount.toFixed(2),
+          systemType: "TMC",
+          dataType: "改签",
+          remark: "改签金额不匹配"
+        });
       }
     } else {
-      results.push({ ticketNo: newInfo.originalTicketNo, amount: newInfo.amount.toFixed(2), systemType: "跨越", dataType: "改签", remark: "改签新表有TMC无" });
+      results.push({
+        ticketNo: newInfo.originalTicketNo,
+        amount: newInfo.amount.toFixed(2),
+        systemType: "跨越",
+        dataType: "改签",
+        remark: "改签新表有TMC无"
+      });
     }
   }
 
   for (const [normalizedNo, tmcInfo] of tmcMap) {
     if (!matchedTicketNos.has(normalizedNo)) {
-      results.push({ ticketNo: tmcInfo.originalTicketNo, amount: tmcInfo.amount.toFixed(2), systemType: "TMC", dataType: "改签", remark: "改签TMC有新表无" });
+      results.push({
+        ticketNo: tmcInfo.originalTicketNo,
+        amount: tmcInfo.amount.toFixed(2),
+        systemType: "TMC",
+        dataType: "改签",
+        remark: "改签TMC有新表无"
+      });
     }
   }
 
   return results;
 };
 
-// 退票对比核心逻辑（返回结果）
+// 退票对比核心逻辑（返回结果）- 与出票逻辑一致，支持航班号+乘机人匹配
 const doCompareTuipiao = (): CompareResultItem[] => {
   let newTableHeaders = compareNewData.value!.headers;
   let newTableData = compareNewData.value!.data;
@@ -1452,13 +1907,31 @@ const doCompareTuipiao = (): CompareResultItem[] => {
   let newTicketNoIdx = findHeaderIndexByKeyword(newTableHeaders, ["票号"]);
   let newAmountIdx = findHeaderIndexByKeyword(newTableHeaders, ["消费金额"]);
   let newSelfPayIdx = findHeaderIndexByKeyword(newTableHeaders, ["员工自付"]);
+  let newFlightNoIdx = findHeaderIndexByKeyword(newTableHeaders, ["航班号"]);
+  let newPassengerIdx = findHeaderIndexByKeyword(newTableHeaders, [
+    "登机人",
+    "乘机人",
+    "乘客姓名"
+  ]);
 
   if (newTicketNoIdx === -1 || newAmountIdx === -1) {
     if (newTableData.length > 0) {
       const potentialHeaders = newTableData[0];
-      const tempTicketIdx = findHeaderIndexByKeyword(potentialHeaders, ["票号"]);
-      const tempAmountIdx = findHeaderIndexByKeyword(potentialHeaders, ["消费金额"]);
-      const tempSelfPayIdx = findHeaderIndexByKeyword(potentialHeaders, ["员工自付"]);
+      const tempTicketIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "票号"
+      ]);
+      const tempAmountIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "消费金额"
+      ]);
+      const tempSelfPayIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "员工自付"
+      ]);
+      const tempFlightNoIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "航班号"
+      ]);
+      const tempPassengerIdx = findHeaderIndexByKeyword(potentialHeaders, [
+        "登机人"
+      ]);
 
       if (tempTicketIdx !== -1 && tempAmountIdx !== -1) {
         newTableHeaders = potentialHeaders;
@@ -1466,6 +1939,8 @@ const doCompareTuipiao = (): CompareResultItem[] => {
         newTicketNoIdx = tempTicketIdx;
         newAmountIdx = tempAmountIdx;
         newSelfPayIdx = tempSelfPayIdx;
+        newFlightNoIdx = tempFlightNoIdx;
+        newPassengerIdx = tempPassengerIdx;
       }
     }
   }
@@ -1473,11 +1948,24 @@ const doCompareTuipiao = (): CompareResultItem[] => {
   const tmcData = tmcTuipiaoData.value!.data;
   const tmcHeaders = tmcTuipiaoData.value!.headers;
 
-  // TMC表字段索引：票面_承运人-票号 和 应退金额
-  const tmcTicketNoIdx = findHeaderIndexByKeyword(tmcHeaders, ["票面_承运人-票号"]);
-  const tmcAmountIdx = findHeaderIndexByKeyword(tmcHeaders, ["应退金额", "退款金额", "金额"]);
+  // TMC表字段索引：票面_承运人-票号、应退金额、票面_航班号、票面_乘机人
+  const tmcTicketNoIdx = findHeaderIndexByKeyword(tmcHeaders, [
+    "票面_承运人-票号"
+  ]);
+  const tmcAmountIdx = findHeaderIndexByKeyword(tmcHeaders, [
+    "应退金额",
+    "退款金额",
+    "金额"
+  ]);
+  const tmcFlightNoIdx = findHeaderIndexByKeyword(tmcHeaders, ["票面_航班号"]);
+  const tmcPassengerIdx = findHeaderIndexByKeyword(tmcHeaders, ["票面_乘机人"]);
 
-  if (newTicketNoIdx === -1 || newAmountIdx === -1 || tmcTicketNoIdx === -1 || tmcAmountIdx === -1) {
+  if (
+    newTicketNoIdx === -1 ||
+    newAmountIdx === -1 ||
+    tmcTicketNoIdx === -1 ||
+    tmcAmountIdx === -1
+  ) {
     return [];
   }
 
@@ -1489,52 +1977,297 @@ const doCompareTuipiao = (): CompareResultItem[] => {
     return cleaned;
   };
 
-  // 构建新表票号映射（消费金额<0的数据）
-  const newTableMap: Map<string, { originalTicketNo: string; amount: number; selfPay: number; row: any[] }> = new Map();
+  const generateFlightPassengerKey = (
+    flightNo: string,
+    passenger: string
+  ): string => {
+    return `${flightNo.trim()}_${passenger.trim()}`;
+  };
+
+  // 新表数据 - 按票号存储
+  const newTableByTicketNo: Map<
+    string,
+    { originalTicketNo: string; amount: number; selfPay: number; row: any[] }
+  > = new Map();
+  // 新表航班号+乘机人Map：值为数组
+  const newTableByFlightPassenger: Map<
+    string,
+    {
+      originalTicketNo: string;
+      amount: number;
+      selfPay: number;
+      flightNo: string;
+      passenger: string;
+      row: any[];
+    }[]
+  > = new Map();
+
   for (const row of newTableData) {
     const ticketNo = String(row[newTicketNoIdx] || "").trim();
     const consumeAmount = parseFloat(row[newAmountIdx]) || 0;
-    const selfPay = newSelfPayIdx >= 0 ? (parseFloat(row[newSelfPayIdx]) || 0) : 0;
-    // 消费金额 + 员工自付（取绝对值后与TMC应退金额比较）
+    const selfPay =
+      newSelfPayIdx >= 0 ? parseFloat(row[newSelfPayIdx]) || 0 : 0;
+    // 退票：消费金额为负数，取绝对值
     const totalAmount = Math.abs(consumeAmount + selfPay);
+
+    // 只处理消费金额为负的退票数据
     if (ticketNo && consumeAmount < 0) {
-      const normalizedNo = normalizeTicketNo(ticketNo);
-      newTableMap.set(normalizedNo, { originalTicketNo: ticketNo, amount: totalAmount, selfPay, row });
+      const flightNo = String(row[newFlightNoIdx] || "").trim();
+      const passenger = String(row[newPassengerIdx] || "").trim();
+
+      if (isEnglishTicketNo(ticketNo)) {
+        // 全英文票号：只用航班号+乘机人匹配
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!newTableByFlightPassenger.has(key)) {
+            newTableByFlightPassenger.set(key, []);
+          }
+          newTableByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount: totalAmount,
+            selfPay,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      } else {
+        // 普通票号：同时存入票号Map和航班号+乘机人Map
+        const normalizedNo = normalizeTicketNo(ticketNo);
+        newTableByTicketNo.set(normalizedNo, {
+          originalTicketNo: ticketNo,
+          amount: totalAmount,
+          selfPay,
+          row
+        });
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!newTableByFlightPassenger.has(key)) {
+            newTableByFlightPassenger.set(key, []);
+          }
+          newTableByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount: totalAmount,
+            selfPay,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      }
     }
   }
 
-  // 构建TMC票号映射
-  const tmcMap: Map<string, { originalTicketNo: string; amount: number; row: any[] }> = new Map();
+  // TMC数据 - 按票号存储
+  const tmcByTicketNo: Map<
+    string,
+    { originalTicketNo: string; amount: number; row: any[] }
+  > = new Map();
+  // TMC航班号+乘机人Map：值为数组
+  const tmcByFlightPassenger: Map<
+    string,
+    {
+      originalTicketNo: string;
+      amount: number;
+      flightNo: string;
+      passenger: string;
+      row: any[];
+    }[]
+  > = new Map();
+
   for (const row of tmcData) {
     const ticketNo = String(row[tmcTicketNoIdx] || "").trim();
     const amount = parseFloat(row[tmcAmountIdx]) || 0;
+
     if (ticketNo && amount > 0) {
-      const normalizedNo = normalizeTicketNo(ticketNo);
-      tmcMap.set(normalizedNo, { originalTicketNo: ticketNo, amount, row });
+      const flightNo = String(row[tmcFlightNoIdx] || "").trim();
+      const passenger = String(row[tmcPassengerIdx] || "").trim();
+
+      if (isEnglishTicketNo(ticketNo)) {
+        // 全英文票号：只用航班号+乘机人匹配
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!tmcByFlightPassenger.has(key)) {
+            tmcByFlightPassenger.set(key, []);
+          }
+          tmcByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      } else {
+        // 普通票号：同时存入票号Map和航班号+乘机人Map
+        const normalizedNo = normalizeTicketNo(ticketNo);
+        tmcByTicketNo.set(normalizedNo, {
+          originalTicketNo: ticketNo,
+          amount,
+          row
+        });
+        if (flightNo && passenger) {
+          const key = generateFlightPassengerKey(flightNo, passenger);
+          if (!tmcByFlightPassenger.has(key)) {
+            tmcByFlightPassenger.set(key, []);
+          }
+          tmcByFlightPassenger.get(key)!.push({
+            originalTicketNo: ticketNo,
+            amount,
+            flightNo,
+            passenger,
+            row
+          });
+        }
+      }
     }
   }
 
   const results: CompareResultItem[] = [];
-  const matchedTicketNos = new Set<string>();
+  const matchedKeys = new Set<string>();
+  const matchedNewTableTicketNos = new Set<string>();
+  const matchedTmcTicketNos = new Set<string>();
 
-  // 对比新表数据与TMC数据（使用绝对值比较）
-  for (const [normalizedNo, newInfo] of newTableMap) {
-    const tmcInfo = tmcMap.get(normalizedNo);
-    if (tmcInfo) {
-      matchedTicketNos.add(normalizedNo);
-      // 使用绝对值比较：新表金额是负数，TMC应退金额是正数
-      if (Math.abs(Math.abs(newInfo.amount) - tmcInfo.amount) > 0.01) {
-        results.push({ ticketNo: newInfo.originalTicketNo, amount: newInfo.amount.toFixed(2), systemType: "跨越", dataType: "退票", remark: "退票金额不匹配" });
-        results.push({ ticketNo: tmcInfo.originalTicketNo, amount: tmcInfo.amount.toFixed(2), systemType: "TMC", dataType: "退票", remark: "退票金额不匹配" });
+  // 1. 先执行航班号+乘机人比对
+  for (const [key, newInfoList] of newTableByFlightPassenger) {
+    const tmcInfoList = tmcByFlightPassenger.get(key);
+    if (tmcInfoList && tmcInfoList.length > 0) {
+      matchedKeys.add(`flight_${key}`);
+      for (const newInfo of newInfoList) {
+        matchedNewTableTicketNos.add(newInfo.originalTicketNo);
+        let foundMatch = false;
+        for (const tmcInfo of tmcInfoList) {
+          if (!matchedTmcTicketNos.has(tmcInfo.originalTicketNo)) {
+            if (Math.abs(newInfo.amount - tmcInfo.amount) <= 0.01) {
+              matchedTmcTicketNos.add(tmcInfo.originalTicketNo);
+              foundMatch = true;
+              break;
+            }
+          }
+        }
+        if (!foundMatch) {
+          const unmatchedTmc = tmcInfoList.find(
+            t => !matchedTmcTicketNos.has(t.originalTicketNo)
+          );
+          if (unmatchedTmc) {
+            matchedTmcTicketNos.add(unmatchedTmc.originalTicketNo);
+            results.push({
+              ticketNo: `${newInfo.originalTicketNo}(${newInfo.flightNo}/${newInfo.passenger})`,
+              amount: newInfo.amount.toFixed(2),
+              selfPay: newInfo.selfPay.toFixed(2),
+              systemType: "跨越",
+              dataType: "退票",
+              remark: "退票金额不匹配(航班+乘机人)"
+            });
+            results.push({
+              ticketNo: `${unmatchedTmc.originalTicketNo}(${unmatchedTmc.flightNo}/${unmatchedTmc.passenger})`,
+              amount: unmatchedTmc.amount.toFixed(2),
+              systemType: "TMC",
+              dataType: "退票",
+              remark: "退票金额不匹配(航班+乘机人)"
+            });
+          } else {
+            results.push({
+              ticketNo: `${newInfo.originalTicketNo}(${newInfo.flightNo}/${newInfo.passenger})`,
+              amount: newInfo.amount.toFixed(2),
+              selfPay: newInfo.selfPay.toFixed(2),
+              systemType: "跨越",
+              dataType: "退票",
+              remark: "退票新表有TMC无(航班+乘机人)"
+            });
+          }
+        }
       }
     } else {
-      results.push({ ticketNo: newInfo.originalTicketNo, amount: newInfo.amount.toFixed(2), systemType: "跨越", dataType: "退票", remark: "退票新表有TMC无" });
+      for (const newInfo of newInfoList) {
+        results.push({
+          ticketNo: `${newInfo.originalTicketNo}(${newInfo.flightNo}/${newInfo.passenger})`,
+          amount: newInfo.amount.toFixed(2),
+          selfPay: newInfo.selfPay.toFixed(2),
+          systemType: "跨越",
+          dataType: "退票",
+          remark: "退票新表有TMC无(航班+乘机人)"
+        });
+      }
     }
   }
 
-  for (const [normalizedNo, tmcInfo] of tmcMap) {
-    if (!matchedTicketNos.has(normalizedNo)) {
-      results.push({ ticketNo: tmcInfo.originalTicketNo, amount: tmcInfo.amount.toFixed(2), systemType: "TMC", dataType: "退票", remark: "退票TMC有新表无" });
+  // 遍历TMC，找出未匹配的记录
+  for (const [key, tmcInfoList] of tmcByFlightPassenger) {
+    if (!matchedKeys.has(`flight_${key}`)) {
+      for (const tmcInfo of tmcInfoList) {
+        results.push({
+          ticketNo: `${tmcInfo.originalTicketNo}(${tmcInfo.flightNo}/${tmcInfo.passenger})`,
+          amount: tmcInfo.amount.toFixed(2),
+          systemType: "TMC",
+          dataType: "退票",
+          remark: "退票TMC有新表无(航班+乘机人)"
+        });
+      }
+    } else {
+      for (const tmcInfo of tmcInfoList) {
+        if (!matchedTmcTicketNos.has(tmcInfo.originalTicketNo)) {
+          results.push({
+            ticketNo: `${tmcInfo.originalTicketNo}(${tmcInfo.flightNo}/${tmcInfo.passenger})`,
+            amount: tmcInfo.amount.toFixed(2),
+            systemType: "TMC",
+            dataType: "退票",
+            remark: "退票TMC有新表无(航班+乘机人)"
+          });
+        }
+      }
+    }
+  }
+
+  // 2. 普通票号比对
+  for (const [normalizedNo, newInfo] of newTableByTicketNo) {
+    if (matchedNewTableTicketNos.has(newInfo.originalTicketNo)) {
+      continue;
+    }
+    const tmcInfo = tmcByTicketNo.get(normalizedNo);
+    if (tmcInfo) {
+      matchedKeys.add(`ticket_${normalizedNo}`);
+      if (Math.abs(newInfo.amount - tmcInfo.amount) > 0.01) {
+        results.push({
+          ticketNo: newInfo.originalTicketNo,
+          amount: newInfo.amount.toFixed(2),
+          selfPay: newInfo.selfPay.toFixed(2),
+          systemType: "跨越",
+          dataType: "退票",
+          remark: "退票金额不匹配"
+        });
+        results.push({
+          ticketNo: tmcInfo.originalTicketNo,
+          amount: tmcInfo.amount.toFixed(2),
+          systemType: "TMC",
+          dataType: "退票",
+          remark: "退票金额不匹配"
+        });
+      }
+    } else {
+      results.push({
+        ticketNo: newInfo.originalTicketNo,
+        amount: newInfo.amount.toFixed(2),
+        selfPay: newInfo.selfPay.toFixed(2),
+        systemType: "跨越",
+        dataType: "退票",
+        remark: "退票新表有TMC无"
+      });
+    }
+  }
+
+  for (const [normalizedNo, tmcInfo] of tmcByTicketNo) {
+    if (
+      !matchedKeys.has(`ticket_${normalizedNo}`) &&
+      !matchedTmcTicketNos.has(tmcInfo.originalTicketNo)
+    ) {
+      results.push({
+        ticketNo: tmcInfo.originalTicketNo,
+        amount: tmcInfo.amount.toFixed(2),
+        systemType: "TMC",
+        dataType: "退票",
+        remark: "退票TMC有新表无"
+      });
     }
   }
 
@@ -1577,7 +2310,7 @@ const exportCompareResult = async () => {
     // 设置表头样式
     const headerRow = worksheet.getRow(1);
     headerRow.height = 22;
-    headerRow.eachCell((cell) => {
+    headerRow.eachCell(cell => {
       cell.font = { bold: true };
       cell.alignment = { horizontal: "center", vertical: "middle" };
       cell.fill = {
@@ -1609,7 +2342,7 @@ const exportCompareResult = async () => {
       }
 
       row.height = 20;
-      row.eachCell((cell) => {
+      row.eachCell(cell => {
         cell.alignment = { horizontal: "center", vertical: "middle" };
         cell.border = {
           top: { style: "thin" },
@@ -1678,7 +2411,7 @@ const exportHotelCompareResult = async () => {
     // 设置表头样式
     const headerRow = worksheet.getRow(1);
     headerRow.height = 22;
-    headerRow.eachCell((cell) => {
+    headerRow.eachCell(cell => {
       cell.font = { bold: true };
       cell.alignment = { horizontal: "center", vertical: "middle" };
       cell.fill = {
@@ -1710,7 +2443,7 @@ const exportHotelCompareResult = async () => {
       }
 
       row.height = 20;
-      row.eachCell((cell) => {
+      row.eachCell(cell => {
         cell.alignment = { horizontal: "center", vertical: "middle" };
         cell.border = {
           top: { style: "thin" },
@@ -2001,9 +2734,9 @@ const generateExcel = async () => {
           { name: "订单号", col: 4 } // D列
         ],
         [
-          { col: 7 },  // 总金额
+          { col: 7 }, // 总金额
           { col: 16 }, // 公司支付金额
-          { col: 17 }  // 个人支付金额
+          { col: 17 } // 个人支付金额
         ]
       );
     }
@@ -2310,7 +3043,9 @@ const resetAll = () => {
           <div class="file-info">
             <span class="file-name">{{ compareTmcFile.name }}</span>
             <span class="file-count"
-              >出票: {{ tmcChupiaoData?.data?.length || 0 }} 条 | 改签: {{ tmcGaiqianData?.data?.length || 0 }} 条 | 退票: {{ tmcTuipiaoData?.data?.length || 0 }} 条</span
+              >出票: {{ tmcChupiaoData?.data?.length || 0 }} 条 | 改签:
+              {{ tmcGaiqianData?.data?.length || 0 }} 条 | 退票:
+              {{ tmcTuipiaoData?.data?.length || 0 }} 条</span
             >
           </div>
         </div>
@@ -2378,7 +3113,9 @@ const resetAll = () => {
         type="success"
         size="large"
         :loading="hotelComparing"
-        :disabled="!compareNewHotelData?.summary || !compareHotelSystemData?.summary"
+        :disabled="
+          !compareNewHotelData?.summary || !compareHotelSystemData?.summary
+        "
         @click="compareHotelData"
       >
         {{ hotelComparing ? "对比中..." : "酒店对比" }}
@@ -2408,7 +3145,7 @@ const resetAll = () => {
           <el-table-column prop="amount" label="金额" min-width="100" />
           <el-table-column prop="selfPay" label="员工自付" min-width="100">
             <template #default="{ row }">
-              {{ row.selfPay || '-' }}
+              {{ row.selfPay || "-" }}
             </template>
           </el-table-column>
           <el-table-column prop="systemType" label="系统类型" min-width="100">
@@ -2420,14 +3157,30 @@ const resetAll = () => {
           </el-table-column>
           <el-table-column prop="dataType" label="数据类型" min-width="100">
             <template #default="{ row }">
-              <el-tag :type="row.dataType === '出票' ? 'primary' : row.dataType === '改签' ? 'warning' : 'danger'">
+              <el-tag
+                :type="
+                  row.dataType === '出票'
+                    ? 'primary'
+                    : row.dataType === '改签'
+                      ? 'warning'
+                      : 'danger'
+                "
+              >
                 {{ row.dataType }}
               </el-tag>
             </template>
           </el-table-column>
           <el-table-column prop="remark" label="备注" min-width="140">
             <template #default="{ row }">
-              <el-tag :type="row.remark.includes('金额不匹配') ? 'danger' : row.remark.includes('新表有TMC无') ? 'info' : 'warning'">
+              <el-tag
+                :type="
+                  row.remark.includes('金额不匹配')
+                    ? 'danger'
+                    : row.remark.includes('新表有TMC无')
+                      ? 'info'
+                      : 'warning'
+                "
+              >
                 {{ row.remark }}
               </el-tag>
             </template>
@@ -2449,10 +3202,18 @@ const resetAll = () => {
               >共 {{ hotelCompareResult.length }} 条差异</span
             >
             <div class="header-actions">
-              <el-button type="primary" size="small" @click="exportHotelCompareResult">
+              <el-button
+                type="primary"
+                size="small"
+                @click="exportHotelCompareResult"
+              >
                 导出结果
               </el-button>
-              <el-button type="success" size="small" @click="hotelCompareFullscreen = true">
+              <el-button
+                type="success"
+                size="small"
+                @click="hotelCompareFullscreen = true"
+              >
                 全屏查看
               </el-button>
             </div>
@@ -2466,7 +3227,11 @@ const resetAll = () => {
               {{ row.newAmount.toFixed(2) }}
             </template>
           </el-table-column>
-          <el-table-column prop="systemAmount" label="酒店系统金额" min-width="120">
+          <el-table-column
+            prop="systemAmount"
+            label="酒店系统金额"
+            min-width="120"
+          >
             <template #default="{ row }">
               {{ row.systemAmount.toFixed(2) }}
             </template>
@@ -2480,7 +3245,15 @@ const resetAll = () => {
           </el-table-column>
           <el-table-column prop="remark" label="备注" min-width="140">
             <template #default="{ row }">
-              <el-tag :type="row.remark === '金额不匹配' ? 'danger' : row.remark === '新表有酒店系统无' ? 'info' : 'warning'">
+              <el-tag
+                :type="
+                  row.remark === '金额不匹配'
+                    ? 'danger'
+                    : row.remark === '新表有酒店系统无'
+                      ? 'info'
+                      : 'warning'
+                "
+              >
                 {{ row.remark }}
               </el-tag>
             </template>
@@ -2498,19 +3271,39 @@ const resetAll = () => {
     >
       <div class="fullscreen-content">
         <div class="fullscreen-toolbar">
-          <span class="result-count">共 {{ hotelCompareResult.length }} 条差异</span>
-          <el-button type="primary" size="small" @click="exportHotelCompareResult">
+          <span class="result-count"
+            >共 {{ hotelCompareResult.length }} 条差异</span
+          >
+          <el-button
+            type="primary"
+            size="small"
+            @click="exportHotelCompareResult"
+          >
             导出结果
           </el-button>
         </div>
-        <el-table :data="hotelCompareResult" border stripe height="calc(100vh - 180px)">
-          <el-table-column prop="hotelName" label="酒店名称" min-width="250" fixed />
+        <el-table
+          :data="hotelCompareResult"
+          border
+          stripe
+          height="calc(100vh - 180px)"
+        >
+          <el-table-column
+            prop="hotelName"
+            label="酒店名称"
+            min-width="250"
+            fixed
+          />
           <el-table-column prop="newAmount" label="新表金额" min-width="120">
             <template #default="{ row }">
               {{ row.newAmount.toFixed(2) }}
             </template>
           </el-table-column>
-          <el-table-column prop="systemAmount" label="酒店系统金额" min-width="120">
+          <el-table-column
+            prop="systemAmount"
+            label="酒店系统金额"
+            min-width="120"
+          >
             <template #default="{ row }">
               {{ row.systemAmount.toFixed(2) }}
             </template>
@@ -2524,7 +3317,15 @@ const resetAll = () => {
           </el-table-column>
           <el-table-column prop="remark" label="备注" min-width="180">
             <template #default="{ row }">
-              <el-tag :type="row.remark === '金额不匹配' ? 'danger' : row.remark === '新表有酒店系统无' ? 'info' : 'warning'">
+              <el-tag
+                :type="
+                  row.remark === '金额不匹配'
+                    ? 'danger'
+                    : row.remark === '新表有酒店系统无'
+                      ? 'info'
+                      : 'warning'
+                "
+              >
                 {{ row.remark }}
               </el-tag>
             </template>
