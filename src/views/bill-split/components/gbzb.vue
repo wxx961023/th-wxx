@@ -129,9 +129,6 @@ const readFile = (file: File) => {
       // 第一行是表头
       const oldHeaders = rows[0];
 
-      // 第二行是额外表头（用于行程单金额计算）
-      const secondRowHeaders = rows[1] || [];
-
       // 构建旧表头到列索引的映射
       const oldHeaderIndexMap = new Map<string, number>();
       oldHeaders.forEach((h, i) => {
@@ -140,28 +137,28 @@ const readFile = (file: File) => {
         }
       });
 
-      // 构建第二行表头到列索引的映射（用于行程单金额计算，使用 === 精确匹配）
-      const secondHeaderIndexMap = new Map<string, number>();
-      secondRowHeaders.forEach((h, i) => {
-        if (h) {
-          secondHeaderIndexMap.set(h.toString().trim(), i);
-        }
-      });
+      // 检测第二行是否为子表头行（包含"票面价/改签补差"等子表头关键词）
+      const subHeaderKeywords = [
+        "票面价/改签补差",
+        "销售价不含税金额",
+        "燃油费不含税金额",
+        "服务费不含税金额"
+      ];
+      let hasSubHeaderRow = false;
+      if (rows.length > 1) {
+        const secondRowValues = rows[1].map((v: any) =>
+          v ? v.toString().trim() : ""
+        );
+        hasSubHeaderRow = subHeaderKeywords.some(kw =>
+          secondRowValues.includes(kw)
+        );
+      }
+
+      // 数据起始行索引：有子表头行则从第3行开始，否则从第2行开始
+      const dataStartIndex = hasSubHeaderRow ? 2 : 1;
 
       console.log("旧表头索引映射:", Object.fromEntries(oldHeaderIndexMap));
-      console.log("第二行表头索引映射:", Object.fromEntries(secondHeaderIndexMap));
-
-      // 从第二行表头动态获取行程单金额计算所需的列索引
-      const priceOrChangeColIndex = secondHeaderIndexMap.get("票面价/改签补差");
-      const airportTaxColIndex = secondHeaderIndexMap.get("机建");
-      const fuelTaxColIndex = secondHeaderIndexMap.get("燃油费");
-      const changeFeeColIndex = secondHeaderIndexMap.get("改签手续费");
-
-      console.log("行程单金额计算列索引:");
-      console.log("票面价/改签补差:", priceOrChangeColIndex);
-      console.log("机建:", airportTaxColIndex);
-      console.log("燃油费:", fuelTaxColIndex);
-      console.log("改签手续费:", changeFeeColIndex);
+      console.log("是否有子表头行:", hasSubHeaderRow, "数据起始行索引:", dataStartIndex);
 
       // 查找"乘机人"列索引（用于分组）
       const personColIndex = oldHeaderIndexMap.get("乘机人");
@@ -177,8 +174,8 @@ const readFile = (file: File) => {
       const priceColIndex = oldHeaderIndexMap.get("票面价");
       const oldChangeFeeColIndex = oldHeaderIndexMap.get("改签费");
 
-      // 数据从第三行开始（跳过第一行和第二行表头）
-      for (let i = 2; i < rows.length; i++) {
+      // 数据从检测到的起始行开始
+      for (let i = dataStartIndex; i < rows.length; i++) {
         const oldRow = rows[i];
         const newRow: any[] = [];
 
@@ -376,7 +373,9 @@ const generateExcel = async (): Promise<Blob> => {
       // 检查是否是行程单金额公式标记
       if (cellValue === "__FORMULA_ITINERARY__") {
         // P列行程单金额公式 = H+K+L+O（票面价/改签补差 + 机建 + 燃油费 + 改签手续费）
-        cell.value = { formula: `H${rowNumber}+K${rowNumber}+L${rowNumber}+O${rowNumber}` };
+        cell.value = {
+          formula: `H${rowNumber}+K${rowNumber}+L${rowNumber}+O${rowNumber}`
+        };
         cell.numFmt = "0.00";
       } else {
         const numValue = parseFloat(String(cellValue ?? 0)) || 0;
@@ -490,7 +489,9 @@ const generateExcel = async (): Promise<Blob> => {
       // 检查是否是行程单金额公式标记
       if (cellValue === "__FORMULA_ITINERARY__") {
         // P列行程单金额公式 = H+K+L+O（票面价/改签补差 + 机建 + 燃油费 + 改签手续费）
-        cell.value = { formula: `H${rowNumber}+K${rowNumber}+L${rowNumber}+O${rowNumber}` };
+        cell.value = {
+          formula: `H${rowNumber}+K${rowNumber}+L${rowNumber}+O${rowNumber}`
+        };
         cell.numFmt = "0.00";
       } else {
         const numValue = parseFloat(String(cellValue ?? 0)) || 0;
