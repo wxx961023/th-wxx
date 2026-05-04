@@ -234,6 +234,37 @@ const beforeUpload = (file: File) => {
   return true;
 };
 
+// 从ExcelJS单元格值中提取纯文本（处理富文本、超链接等对象类型）
+const extractCellValue = (value: any): any => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
+  if (value instanceof Date) return value;
+  // 富文本: { richText: [{ text: '...' }, ...] }
+  if (value.richText && Array.isArray(value.richText)) {
+    return value.richText.map((rt: any) => rt.text || "").join("");
+  }
+  // 超链接: { text: '...', hyperlink: '...' }
+  if (value.text !== undefined && value.hyperlink !== undefined) {
+    return value.text;
+  }
+  // 超链接只有text: { text: '...' }
+  if (typeof value.text === "string" && value.richText === undefined) {
+    return value.text;
+  }
+  // 公式: { formula: '...', result: ... }
+  if (value.formula !== undefined && value.result !== undefined) {
+    return value.result;
+  }
+  // 其他对象，尝试toString
+  if (typeof value === "object") {
+    try {
+      const str = value.toString();
+      if (str !== "[object Object]") return str;
+    } catch {}
+  }
+  return value;
+};
+
 // 读取Excel文件（支持 .xls 和 .xlsx）
 const readExcelFile = async (
   file: File,
@@ -298,7 +329,7 @@ const readExcelFile = async (
             row.eachCell({ includeEmpty: true }, cell => {
               // ExcelJS的col从1开始，转换为0索引
               const colIndex = Number(cell.col) - 1;
-              rowData[colIndex] = cell.value;
+              rowData[colIndex] = extractCellValue(cell.value);
             });
             rows.push(rowData);
           });
@@ -843,6 +874,7 @@ const findBestMatch = (
 ): {
   normalizedName: string;
   data: { originalName: string; amount: number };
+  similarity?: number;
 } | null => {
   const normalizedTarget = normalizeHotelName(targetName);
 
@@ -850,7 +882,8 @@ const findBestMatch = (
   if (hotelMap.has(normalizedTarget)) {
     return {
       normalizedName: normalizedTarget,
-      data: hotelMap.get(normalizedTarget)!
+      data: hotelMap.get(normalizedTarget)!,
+      similarity: 1
     };
   }
 
@@ -871,9 +904,7 @@ const findBestMatch = (
     }
   }
 
-  return bestMatch
-    ? { normalizedName: bestMatch.normalizedName, data: bestMatch.data }
-    : null;
+  return bestMatch || null;
 };
 
 // 处理酒店系统文件上传
@@ -926,9 +957,34 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
     );
     console.log("总行数:", result.data.length);
 
-    // 先按原始名称初步汇总
+    // 自动检测数据起始行：遍历result.data，找到第一个酒店名称列有实际酒店名（非表头文字）的行
+    // 表头行的特征：酒店名称列的值是"酒店名称"、"酒店信息"等表头文字
+    const headerKeywords = ["酒店名称"];
+    let dataStartIndex = 0;
+    for (let i = 0; i < result.data.length; i++) {
+      const row = result.data[i];
+      const hotelName = String(row[hotelNameIdx] || "").trim();
+      // 如果酒店名称列的值是表头关键词，说明这是表头行，跳过
+      if (hotelName && !headerKeywords.includes(hotelName)) {
+        dataStartIndex = i;
+        break;
+      }
+    }
+    console.log("数据起始行索引(result.data中):", dataStartIndex);
+
+    // 调试：打印result.data前5行，看实际数据结构
+    console.log("=== 酒店系统文件原始数据前5行 ===");
+    for (let i = 0; i < Math.min(5, result.data.length); i++) {
+      const row = result.data[i];
+      console.log(
+        `  result.data[${i}]: hotelNameIdx[${hotelNameIdx}]="${row[hotelNameIdx]}", amountIdx[${amountIdx}]="${row[amountIdx]}", 全行=`,
+        row.slice(0, Math.max(hotelNameIdx, amountIdx) + 2)
+      );
+    }
+
     const rawSummary = new Map<string, number>();
-    for (const row of result.data) {
+    for (let i = dataStartIndex; i < result.data.length; i++) {
+      const row = result.data[i];
       const hotelName = String(row[hotelNameIdx] || "").trim();
       const amount = parseFloat(row[amountIdx]) || 0;
       if (hotelName) {
@@ -976,6 +1032,10 @@ const handleCompareHotelSystemFileChange = async (uploadFile: any) => {
       ([name, total]) => ({ hotelName: name, totalAmount: total })
     );
     console.log("汇总数据:", summaryArray.slice(0, 10));
+
+    // 调试：搜索"艺选"
+    const yixuanInRawSummary = Array.from(rawSummary.entries()).filter(([n]) => n.includes("艺选"));
+    console.log("[酒店系统上传] 原始汇总中含'艺选':", yixuanInRawSummary);
 
     compareHotelSystemFile.value = file;
     compareHotelSystemData.value = {
@@ -1116,6 +1176,20 @@ const compareHotelData = () => {
     const newSummary = compareNewHotelData.value.summary;
     const systemSummary = compareHotelSystemData.value.summary;
 
+    // ============ 调试：打印两边原始汇总 ============
+    console.log("========== 酒店比对调试 ==========");
+    console.log(`新表酒店汇总: ${newSummary.size} 个`);
+    for (const [name, amount] of newSummary.entries()) {
+      const norm = normalizeHotelName(name);
+      console.log(`  原始: "${name}" | 规范化: "${norm}" | 金额: ${amount} | 字符编码: [${name.split("").map(c => c.charCodeAt(0)).join(",")}]`);
+    }
+    console.log(`系统酒店汇总: ${systemSummary.size} 个`);
+    for (const [name, amount] of systemSummary.entries()) {
+      const norm = normalizeHotelName(name);
+      console.log(`  原始: "${name}" | 规范化: "${norm}" | 金额: ${amount} | 字符编码: [${name.split("").map(c => c.charCodeAt(0)).join(",")}]`);
+    }
+    console.log("===================================");
+
     // 将两个汇总都转换为规范化名称的Map
     const normalizedNewSummary = new Map<
       string,
@@ -1130,13 +1204,33 @@ const compareHotelData = () => {
       string,
       { originalName: string; amount: number }
     >();
+    const systemNameCollisionLog: string[] = [];
     for (const [name, amount] of systemSummary.entries()) {
       const normalizedName = normalizeHotelName(name);
+      if (normalizedSystemSummary.has(normalizedName)) {
+        const existing = normalizedSystemSummary.get(normalizedName)!;
+        systemNameCollisionLog.push(
+          `规范化冲突: "${existing.originalName}"(${existing.amount}) 被 "${name}"(${amount}) 覆盖, 规范化key="${normalizedName}"`
+        );
+      }
       normalizedSystemSummary.set(normalizedName, {
         originalName: name,
         amount
       });
     }
+    if (systemNameCollisionLog.length > 0) {
+      console.warn("[酒店比对] 系统侧规范化名称冲突:", systemNameCollisionLog);
+    }
+
+    // 针对性调试：搜索"艺选"在系统侧的情况
+    const yixuanInSystemRaw = Array.from(systemSummary.entries()).filter(([n]) => n.includes("艺选"));
+    const yixuanInSystemNorm = Array.from(normalizedSystemSummary.entries()).filter(([n]) => n.includes("艺选"));
+    console.log("[酒店比对-艺选调试] 系统原始汇总中含'艺选':", yixuanInSystemRaw);
+    console.log("[酒店比对-艺选调试] 系统规范化Map中含'艺选':", yixuanInSystemNorm);
+    const yixuanInNewRaw = Array.from(newSummary.entries()).filter(([n]) => n.includes("艺选"));
+    const yixuanInNewNorm = Array.from(normalizedNewSummary.entries()).filter(([n]) => n.includes("艺选"));
+    console.log("[酒店比对-艺选调试] 新表原始汇总中含'艺选':", yixuanInNewRaw);
+    console.log("[酒店比对-艺选调试] 新表规范化Map中含'艺选':", yixuanInNewNorm);
 
     const results: {
       hotelName: string;
@@ -1151,22 +1245,42 @@ const compareHotelData = () => {
     const newOnlyItems: { hotelName: string; amount: number }[] = [];
     const systemOnlyItems: { hotelName: string; amount: number }[] = [];
 
-    // 找出新表有但酒店系统没有的酒店（暂时注释相似度匹配，使用精确匹配）
+    // 找出新表有但酒店系统没有的酒店（先精确匹配，再相似度匹配）
     for (const [normalizedName, newData] of normalizedNewSummary.entries()) {
-      // const matchResult = findBestMatch(newData.originalName, normalizedSystemSummary, 0.9);
+      // 优先使用精确匹配（规范化后的名称）
+      let systemData = normalizedSystemSummary.get(normalizedName);
+      let matchedNormalizedName = normalizedName;
 
-      // 使用精确匹配（规范化后的名称）
-      const systemData = normalizedSystemSummary.get(normalizedName);
+      // 精确匹配失败，尝试相似度匹配
+      if (systemData === undefined) {
+        const matchResult = findBestMatch(newData.originalName, normalizedSystemSummary, 0.8);
+        if (matchResult) {
+          systemData = matchResult.data;
+          matchedNormalizedName = matchResult.normalizedName;
+          console.log(
+            `[酒店比对] 相似度匹配: 新表"${newData.originalName}" <-> 系统"${matchResult.data.originalName}", 相似度=${matchResult.similarity?.toFixed(4)}`
+          );
+        }
+      }
 
       if (systemData === undefined) {
         // 没有找到匹配，先收集起来
+        console.warn(
+          `[酒店比对] 未匹配: 新表"${newData.originalName}" (规范化: "${normalizedName}"), 金额=${newData.amount}`
+        );
+        // 打印系统侧所有包含关键字的酒店名称，辅助排查
+        const keyChars = newData.originalName.replace(/[（(）)店]/g, "").slice(0, 4);
+        const candidates = Array.from(normalizedSystemSummary.keys()).filter(n => n.includes(keyChars));
+        if (candidates.length > 0) {
+          console.warn(`  系统侧可能的候选(含"${keyChars}"):`, candidates);
+        }
         newOnlyItems.push({
           hotelName: newData.originalName,
           amount: newData.amount
         });
       } else {
         // 找到匹配，记录已匹配
-        matchedSystemHotels.add(normalizedName);
+        matchedSystemHotels.add(matchedNormalizedName);
 
         if (Math.abs(newData.amount - systemData.amount) > 0.01) {
           results.push({
