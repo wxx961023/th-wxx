@@ -111,14 +111,37 @@ const institutionalClientsRoute: RouteRecordRaw = {
   ]
 }
 
+/** 企业账单路由 */
+const enterpriseBillsRoute: RouteRecordRaw = {
+  path: "/enterprise-bills",
+  name: "EnterpriseBillsModule",
+  component: () => import("@/layout/index.vue"),
+  redirect: "/enterprise-bills/index",
+  meta: {
+    icon: "ep:files",
+    title: "企业账单",
+    rank: 4
+  },
+  children: [
+    {
+      path: "/enterprise-bills/index",
+      name: "EnterpriseBillsIndex",
+      component: () => import("@/views/enterprise-bills/index.vue"),
+      meta: {
+        title: "企业账单"
+      }
+    }
+  ]
+}
+
 /** 导出静态路由 */
-export const constantRoutes: Array<RouteRecordRaw> = [homeRoute, pdfRoute, billSplitRoute, institutionalClientsRoute]
+export const constantRoutes: Array<RouteRecordRaw> = [homeRoute, pdfRoute, billSplitRoute, institutionalClientsRoute, enterpriseBillsRoute]
 
 /** 初始的静态路由，用于退出登录时重置路由 */
 const initConstantRoutes: Array<RouteRecordRaw> = cloneDeep(constantRoutes)
 
 /** 用于渲染菜单，保持原始层级 */
-export const constantMenus: Array<any> = [homeRoute, pdfRoute, billSplitRoute, institutionalClientsRoute]
+export const constantMenus: Array<any> = [homeRoute, pdfRoute, billSplitRoute, institutionalClientsRoute, enterpriseBillsRoute]
 
 /** 不参与菜单的路由 */
 export const remainingPaths = Object.keys(remainingRouter).map(v => {
