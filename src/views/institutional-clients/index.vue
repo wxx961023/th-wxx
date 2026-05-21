@@ -380,43 +380,74 @@ const getAllDataAndExport = async () => {
 
     // 如果没有选中数据，则获取全部数据
     if (selectedRows.value.length === 0) {
-      const allDataParams: Partial<CorpSearchRequest> = {
-        pageNumber: 1,
-        pageSize: total.value || 1000, // 使用总数量作为pageSize
-        nameLike: searchKeyword.value || null,
-        settlementStaffNameLike: settlementStaffNameKeyword.value || null
-      };
+      const totalCount = total.value || 100;
+      const pageSize = 120;
 
-      console.log("📡 获取全部数据，参数:", allDataParams);
-      const response = await searchCorps(allDataParams);
+      // 对原始数据做统一转换的辅助函数
+      const transformItem = (item: any) => ({
+        ...item,
+        location: [item.province, item.city, item.area]
+          .filter(Boolean)
+          .join(" "),
+        salesStaffName:
+          item.salesStaffs && item.salesStaffs.length > 0
+            ? item.salesStaffs[0].staffName
+            : "-",
+        customerStaffName:
+          item.customerStaffs && item.customerStaffs.length > 0
+            ? item.customerStaffs[0].staffName
+            : "-",
+        settlementStaffName:
+          item.settlementStaffs && item.settlementStaffs.length > 0
+            ? item.settlementStaffs[0].staffName
+            : "-"
+      });
 
-      if (response.code === 0 && response.data) {
-        // 使用获取到的全部数据
-        const allData = response.data.content.map(item => ({
-          ...item,
-          // 组合地址字段
-          location: [item.province, item.city, item.area]
-            .filter(Boolean)
-            .join(" "),
-          // 获取嵌套的员工姓名
-          salesStaffName:
-            item.salesStaffs && item.salesStaffs.length > 0
-              ? item.salesStaffs[0].staffName
-              : "-",
-          customerStaffName:
-            item.customerStaffs && item.customerStaffs.length > 0
-              ? item.customerStaffs[0].staffName
-              : "-",
-          settlementStaffName:
-            item.settlementStaffs && item.settlementStaffs.length > 0
-              ? item.settlementStaffs[0].staffName
-              : "-"
-        }));
+      let allData: any[] = [];
 
+      if (totalCount > 120) {
+        // 分段请求再合并
+        const totalPages = Math.ceil(totalCount / pageSize);
+        const requests = [];
+        for (let page = 1; page <= totalPages; page++) {
+          const params: Partial<CorpSearchRequest> = {
+            pageNumber: page,
+            pageSize,
+            nameLike: searchKeyword.value || null,
+            settlementStaffNameLike: settlementStaffNameKeyword.value || null
+          };
+          requests.push(searchCorps(params));
+        }
+        console.log(`📡 分段获取全部数据，共 ${totalCount} 条，分 ${totalPages} 页请求`);
+        const responses = await Promise.all(requests);
+        for (const response of responses) {
+          if (response.code === 0 && response.data) {
+            allData.push(...response.data.content.map(transformItem));
+          }
+        }
+      } else {
+        // 数据量不大，一次请求即可
+        const allDataParams: Partial<CorpSearchRequest> = {
+          pageNumber: 1,
+          pageSize: totalCount,
+          nameLike: searchKeyword.value || null,
+          settlementStaffNameLike: settlementStaffNameKeyword.value || null
+        };
+        console.log("📡 获取全部数据，参数:", allDataParams);
+        const response = await searchCorps(allDataParams);
+        if (response.code === 0 && response.data) {
+          allData = response.data.content.map(transformItem);
+        } else {
+          ElMessage.error("获取全部数据失败");
+          return;
+        }
+      }
+
+      if (allData.length > 0) {
         await exportExcelData(allData);
         ElMessage.success(`成功导出全部 ${allData.length} 条数据！`);
       } else {
-        ElMessage.error("获取全部数据失败");
+        ElMessage.warning("未获取到数据");
       }
     } else {
       // 导出选中的数据
