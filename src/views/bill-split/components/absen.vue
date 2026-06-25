@@ -2860,16 +2860,49 @@ const fillOverviewData = (
     });
   }
 
+  // 计算账期范围：上个月25号到当月24号
+  const periodNow = new Date();
+  const periodStart = new Date(periodNow.getFullYear(), periodNow.getMonth() - 1, 25);
+  const periodEnd = new Date(periodNow.getFullYear(), periodNow.getMonth(), 24);
+  const formatDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const periodStartStr = formatDate(periodStart);
+  const periodEndStr = formatDate(periodEnd);
+
+  // 更新账期范围（"2025-11-25"、"至"、"2025-12-22" 分布在三个独立单元格中）
+  overviewWorksheet.eachRow((row: any) => {
+    for (let col = 1; col <= 20; col++) {
+      const cell = row.getCell(col);
+      if (cell && cell.value) {
+        const cellText = String(cell.value).trim();
+        if (cellText === "至") {
+          // 找到"至"字所在位置，左边是开始日期，右边是结束日期
+          const startCell = row.getCell(col - 1);
+          const endCell = row.getCell(col + 1);
+          if (
+            startCell &&
+            /\d{4}-\d{2}-\d{2}/.test(String(startCell.value || ""))
+          ) {
+            startCell.value = periodStartStr;
+          }
+          if (endCell && /\d{4}-\d{2}-\d{2}/.test(String(endCell.value || ""))) {
+            endCell.value = periodEndStr;
+          }
+          console.log(`账期范围已更新: ${periodStartStr} 至 ${periodEndStr}`);
+        }
+      }
+    }
+  });
+
   // 更新账单标题中的日期
   overviewWorksheet.eachRow((row: any) => {
     const firstCell = row.getCell(1);
     if (firstCell && firstCell.value) {
       const cellText = firstCell.value.toString();
       if (cellText.includes("深圳市艾比森光电股份有限公司账单")) {
-        // 获取当前年月
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
+        // 标题日期使用账期结束月份（当月）
+        const year = periodEnd.getFullYear();
+        const month = String(periodEnd.getMonth() + 1).padStart(2, '0');
         const yearMonth = `${year}${month}`;
 
         // 替换标题中的日期部分
@@ -2880,7 +2913,7 @@ const fillOverviewData = (
     }
   });
 
-  // 更新付款日期为下个月的14号
+  // 更新付款日期为账期结束后的下个月14号
   overviewWorksheet.eachRow((row: any) => {
     // 检查每个单元格
     for (let col = 1; col <= 20; col++) {
@@ -2888,13 +2921,9 @@ const fillOverviewData = (
       if (cell && cell.value) {
         const cellText = cell.value.toString();
         if (cellText.includes("请在YYYY-MM-DD前，将本期应还金额付款到以下账户：")) {
-          // 获取下个月的日期
-          const now = new Date();
-          const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 14);
-          const year = nextMonth.getFullYear();
-          const month = String(nextMonth.getMonth() + 1).padStart(2, '0');
-          const day = String(nextMonth.getDate()).padStart(2, '0');
-          const formattedDate = `${year}-${month}-${day}`;
+          // 付款日期 = 账期结束月（当月）的下个月14号
+          const payDate = new Date(periodEnd.getFullYear(), periodEnd.getMonth() + 1, 14);
+          const formattedDate = formatDate(payDate);
 
           // 替换日期部分
           const newText = cellText.replace("YYYY-MM-DD", formattedDate);
