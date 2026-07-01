@@ -266,18 +266,50 @@ const getAllDataAndExport = async () => {
     }
 
     ElMessage.info("正在获取全部账单数据，请稍候...");
-    const response = await getCreditBills({
-      ...buildRequestParams(),
-      pageNumber: 1,
-      pageSize: total.value || 1000
-    });
+    const totalCount = total.value || 0;
+    const pageSize = 200;
 
-    if (response.code === 0 && response.data) {
-      const allData = (response.data.content || []).map(normalizeBillItem);
+    let allData: CreditBillItem[] = [];
+
+    if (totalCount > 200) {
+      // 分段请求再合并
+      const totalPages = Math.ceil(totalCount / pageSize);
+      const requests = [];
+      for (let page = 1; page <= totalPages; page++) {
+        requests.push(
+          getCreditBills({
+            ...buildRequestParams(),
+            pageNumber: page,
+            pageSize
+          })
+        );
+      }
+      const responses = await Promise.all(requests);
+      for (const response of responses) {
+        if (response.code === 0 && response.data) {
+          allData.push(...(response.data.content || []).map(normalizeBillItem));
+        }
+      }
+    } else {
+      // 数据量不大，一次请求即可
+      const response = await getCreditBills({
+        ...buildRequestParams(),
+        pageNumber: 1,
+        pageSize: totalCount || 200
+      });
+      if (response.code === 0 && response.data) {
+        allData = (response.data.content || []).map(normalizeBillItem);
+      } else {
+        ElMessage.error(response.message || "获取全部账单失败");
+        return;
+      }
+    }
+
+    if (allData.length > 0) {
       exportExcelData(allData);
       ElMessage.success(`已导出全部 ${allData.length} 条账单`);
     } else {
-      ElMessage.error(response.message || "获取全部账单失败");
+      ElMessage.warning("未获取到账单数据");
     }
   } catch (error: any) {
     ElMessage.error(error.message || "导出失败");
