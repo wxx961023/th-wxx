@@ -58,9 +58,11 @@ const showCompareResult = ref(false);
 const compareFullscreen = ref(false);
 
 // 读取Excel文件（单个工作表）
+// headerRow: 表头所在行号（从1开始），默认为1
 const readExcelSheet = async (
   file: File,
-  sheetName?: string
+  sheetName?: string,
+  headerRow = 1
 ): Promise<{ headers: any[]; data: any[][] }> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -101,9 +103,9 @@ const readExcelSheet = async (
               rowData[colIndex] = getCellValue(cell);
             });
 
-            if (rowNumber === 1) {
+            if (rowNumber === headerRow) {
               headers.push(...rowData);
-            } else {
+            } else if (rowNumber > headerRow) {
               rows.push(rowData);
             }
           });
@@ -119,8 +121,9 @@ const readExcelSheet = async (
             header: 1
           }) as any[][];
 
-          const headers = jsonData[0] || [];
-          const rows = jsonData.slice(1);
+          const headerIdx = headerRow - 1;
+          const headers = jsonData[headerIdx] || [];
+          const rows = jsonData.slice(headerIdx + 1);
 
           resolve({ headers, data: rows });
         }
@@ -276,7 +279,11 @@ const handleTmcFileChange = async (uploadFile: any) => {
   tmcLoading.value = true;
 
   try {
-    const result = await readExcelMultipleSheets(file, ["出票", "改签", "退票"]);
+    const result = await readExcelMultipleSheets(file, [
+      "出票",
+      "改签",
+      "退票"
+    ]);
 
     tmcFile.value = file;
 
@@ -355,7 +362,7 @@ const handleHotelBillFileChange = async (uploadFile: any) => {
   hotelBillLoading.value = true;
 
   try {
-    const result = await readExcelSheet(file, "酒店明细(国内)");
+    const result = await readExcelSheet(file, "酒店明细(国内)", 3);
 
     hotelBillFile.value = file;
     hotelBillData.value = result;
@@ -387,7 +394,9 @@ const clearHotelBillFile = () => {
 // 对比数据
 const compareData = () => {
   // 检查是否有可对比的数据
-  const hasFlightCompare = flightData.value && (tmcIssueData.value || tmcChangeData.value || tmcRefundData.value);
+  const hasFlightCompare =
+    flightData.value &&
+    (tmcIssueData.value || tmcChangeData.value || tmcRefundData.value);
   const hasHotelCompare = hotelData.value && hotelBillData.value;
 
   if (!hasFlightCompare && !hasHotelCompare) {
@@ -404,436 +413,469 @@ const compareData = () => {
       const flightHeaders = flightData.value!.headers;
       const flightRows = flightData.value!.data;
 
-    // 找到客户账单的列索引
-    // M列是第13列，索引为12
-    const ticketNoColIndex = 12; // M列 - 承运人-票号
-    // U列是第21列，索引为20
-    const refundFeeColIndex = 20; // U列 - 退票手续费
-    // V列是第22列，索引为21
-    const changeFeeColIndex = 21; // V列 - 改签手续费
-    // 查找结算金额列
-    const settlementColIndex = flightHeaders.findIndex(
-      h => h && h.toString().includes("结算金额")
-    );
-
-    console.log("=== 客户账单列索引 ===");
-    console.log("承运人-票号 列索引:", ticketNoColIndex);
-    console.log("退票手续费 列索引 (U列):", refundFeeColIndex);
-    console.log("结算金额 列索引:", settlementColIndex);
-    console.log("改签手续费 列索引 (V列):", changeFeeColIndex);
-
-    // ========== 出票对比 ==========
-    if (tmcIssueData.value) {
-      const tmcHeaders = tmcIssueData.value.headers;
-      const tmcRows = tmcIssueData.value.data;
-
-      // 找到TMC出票的列索引
-      const tmcTicketNoColIndex = tmcHeaders.findIndex(
-        h => h && h.toString().includes("全票号")
+      // 找到客户账单的列索引
+      // M列是第13列，索引为12
+      const ticketNoColIndex = 12; // M列 - 承运人-票号
+      // U列是第21列，索引为20
+      const refundFeeColIndex = 20; // U列 - 退票手续费
+      // V列是第22列，索引为21
+      const changeFeeColIndex = 21; // V列 - 改签手续费
+      // 查找结算金额列
+      const settlementColIndex = flightHeaders.findIndex(
+        h => h && h.toString().includes("结算金额")
       );
-      const tmcAmountColIndex = tmcHeaders.findIndex(
-        h => h && h.toString().includes("应收金额")
-      );
-      // L列是第12列，索引为11 - 乘机日
-      const tmcFlightDateColIndex = 11;
 
-      console.log("=== TMC出票列索引 ===");
-      console.log("全票号 列索引:", tmcTicketNoColIndex);
-      console.log("应收金额 列索引:", tmcAmountColIndex);
-      console.log("乘机日 列索引 (L列):", tmcFlightDateColIndex);
+      console.log("=== 客户账单列索引 ===");
+      console.log("承运人-票号 列索引:", ticketNoColIndex);
+      console.log("退票手续费 列索引 (U列):", refundFeeColIndex);
+      console.log("结算金额 列索引:", settlementColIndex);
+      console.log("改签手续费 列索引 (V列):", changeFeeColIndex);
 
-      if (settlementColIndex === -1) {
-        ElMessage.warning("客户账单未找到'结算金额'列");
-      } else if (tmcTicketNoColIndex === -1) {
-        ElMessage.warning("TMC出票未找到'全票号'列");
-      } else if (tmcAmountColIndex === -1) {
-        ElMessage.warning("TMC出票未找到'应收金额'列");
-      } else {
-        // 格式化日期为 yyyy/M/d 格式
-        const formatDate = (dateValue: any): string => {
-          if (!dateValue) return "";
-          // 如果是Date对象
-          if (dateValue instanceof Date) {
-            const year = dateValue.getFullYear();
-            const month = dateValue.getMonth() + 1;
-            const day = dateValue.getDate();
-            return `${year}/${month}/${day}`;
-          }
-          // 如果是字符串，尝试解析
-          const str = dateValue.toString().trim();
-          if (str) return str;
-          return "";
-        };
+      // ========== 出票对比 ==========
+      if (tmcIssueData.value) {
+        const tmcHeaders = tmcIssueData.value.headers;
+        const tmcRows = tmcIssueData.value.data;
 
-        // 构建TMC出票数据映射
-        const tmcIssueMap = new Map<string, { row: any[]; amount: number; flightDate: string }>();
-        tmcRows.forEach(row => {
-          const ticketNo = row[tmcTicketNoColIndex]?.toString().trim();
-          const amount = parseFloat(row[tmcAmountColIndex]) || 0;
-          const flightDate = formatDate(row[tmcFlightDateColIndex]);
-          if (ticketNo) {
-            tmcIssueMap.set(ticketNo, { row, amount, flightDate });
-          }
-        });
+        // 找到TMC出票的列索引
+        const tmcTicketNoColIndex = tmcHeaders.findIndex(
+          h => h && h.toString().includes("全票号")
+        );
+        const tmcAmountColIndex = tmcHeaders.findIndex(
+          h => h && h.toString().includes("应收金额")
+        );
+        // L列是第12列，索引为11 - 乘机日
+        const tmcFlightDateColIndex = 11;
 
-        // 构建客户账单出票数据映射（按票号汇总结算金额）
-        const customerIssueMap = new Map<string, { totalAmount: number; rowNumbers: number[] }>();
-        flightRows.forEach((row, index) => {
-          const ticketNo = row[ticketNoColIndex]?.toString().trim();
-          const settlementAmount = parseFloat(row[settlementColIndex]) || 0;
-          const changeFee = parseFloat(row[changeFeeColIndex]) || 0;
+        console.log("=== TMC出票列索引 ===");
+        console.log("全票号 列索引:", tmcTicketNoColIndex);
+        console.log("应收金额 列索引:", tmcAmountColIndex);
+        console.log("乘机日 列索引 (L列):", tmcFlightDateColIndex);
 
-          // 结算金额需要大于0，且改签手续费需要等于0
-          if (settlementAmount <= 0) return;
-          if (changeFee !== 0) return;
-          if (!ticketNo) return;
+        if (settlementColIndex === -1) {
+          ElMessage.warning("客户账单未找到'结算金额'列");
+        } else if (tmcTicketNoColIndex === -1) {
+          ElMessage.warning("TMC出票未找到'全票号'列");
+        } else if (tmcAmountColIndex === -1) {
+          ElMessage.warning("TMC出票未找到'应收金额'列");
+        } else {
+          // 格式化日期为 yyyy/M/d 格式
+          const formatDate = (dateValue: any): string => {
+            if (!dateValue) return "";
+            // 如果是Date对象
+            if (dateValue instanceof Date) {
+              const year = dateValue.getFullYear();
+              const month = dateValue.getMonth() + 1;
+              const day = dateValue.getDate();
+              return `${year}/${month}/${day}`;
+            }
+            // 如果是字符串，尝试解析
+            const str = dateValue.toString().trim();
+            if (str) return str;
+            return "";
+          };
 
-          if (customerIssueMap.has(ticketNo)) {
-            const existing = customerIssueMap.get(ticketNo)!;
-            existing.totalAmount += settlementAmount;
-            existing.rowNumbers.push(index + 2);
-          } else {
-            customerIssueMap.set(ticketNo, {
-              totalAmount: settlementAmount,
-              rowNumbers: [index + 2]
-            });
-          }
-        });
+          // 构建TMC出票数据映射
+          const tmcIssueMap = new Map<
+            string,
+            { row: any[]; amount: number; flightDate: string }
+          >();
+          tmcRows.forEach(row => {
+            const ticketNo = row[tmcTicketNoColIndex]?.toString().trim();
+            const amount = parseFloat(row[tmcAmountColIndex]) || 0;
+            const flightDate = formatDate(row[tmcFlightDateColIndex]);
+            if (ticketNo) {
+              tmcIssueMap.set(ticketNo, { row, amount, flightDate });
+            }
+          });
 
-        const matchedTmcIssueTickets = new Set<string>();
+          // 构建客户账单出票数据映射（按票号汇总结算金额）
+          const customerIssueMap = new Map<
+            string,
+            { totalAmount: number; rowNumbers: number[] }
+          >();
+          flightRows.forEach((row, index) => {
+            const ticketNo = row[ticketNoColIndex]?.toString().trim();
+            const settlementAmount = parseFloat(row[settlementColIndex]) || 0;
+            const changeFee = parseFloat(row[changeFeeColIndex]) || 0;
 
-        // 遍历客户账单汇总数据进行出票对比
-        customerIssueMap.forEach((customerRecord, ticketNo) => {
-          const tmcRecord = tmcIssueMap.get(ticketNo);
+            // 结算金额需要大于0，且改签手续费需要等于0
+            if (settlementAmount <= 0) return;
+            if (changeFee !== 0) return;
+            if (!ticketNo) return;
 
-          if (tmcRecord) {
-            matchedTmcIssueTickets.add(ticketNo);
-            const tmcAmount = tmcRecord.amount;
-            const diff = customerRecord.totalAmount - tmcAmount;
+            if (customerIssueMap.has(ticketNo)) {
+              const existing = customerIssueMap.get(ticketNo)!;
+              existing.totalAmount += settlementAmount;
+              existing.rowNumbers.push(index + 2);
+            } else {
+              customerIssueMap.set(ticketNo, {
+                totalAmount: settlementAmount,
+                rowNumbers: [index + 2]
+              });
+            }
+          });
 
-            if (Math.abs(diff) > 0.01) {
+          const matchedTmcIssueTickets = new Set<string>();
+
+          // 遍历客户账单汇总数据进行出票对比
+          customerIssueMap.forEach((customerRecord, ticketNo) => {
+            const tmcRecord = tmcIssueMap.get(ticketNo);
+
+            if (tmcRecord) {
+              matchedTmcIssueTickets.add(ticketNo);
+              const tmcAmount = tmcRecord.amount;
+              const diff = customerRecord.totalAmount - tmcAmount;
+
+              if (Math.abs(diff) > 0.01) {
+                compareResult.value.push({
+                  category: "出票",
+                  type: "金额不匹配",
+                  ticketNo,
+                  customerAmount: customerRecord.totalAmount,
+                  tmcAmount,
+                  diff: diff.toFixed(2),
+                  customerRow: customerRecord.rowNumbers.join(","),
+                  tmcRow: tmcRows.indexOf(tmcRecord.row) + 2
+                });
+              }
+            } else {
               compareResult.value.push({
                 category: "出票",
-                type: "金额不匹配",
+                type: "客户有TMC无",
                 ticketNo,
                 customerAmount: customerRecord.totalAmount,
-                tmcAmount,
-                diff: diff.toFixed(2),
+                tmcAmount: "-",
+                diff: customerRecord.totalAmount.toFixed(2),
                 customerRow: customerRecord.rowNumbers.join(","),
-                tmcRow: tmcRows.indexOf(tmcRecord.row) + 2
+                tmcRow: "-"
               });
             }
-          } else {
+          });
+
+          // TMC出票有但客户账单没有
+          tmcRows.forEach((row, index) => {
+            const ticketNo = row[tmcTicketNoColIndex]?.toString().trim();
+            const tmcAmount = parseFloat(row[tmcAmountColIndex]) || 0;
+            const flightDate = formatDate(row[tmcFlightDateColIndex]);
+
+            if (!ticketNo) return;
+            if (matchedTmcIssueTickets.has(ticketNo)) return;
+
+            // 拼接票号和乘机日
+            const displayTicketNo = flightDate
+              ? `${ticketNo}（起飞时间：${flightDate}）`
+              : ticketNo;
+
             compareResult.value.push({
               category: "出票",
-              type: "客户有TMC无",
-              ticketNo,
-              customerAmount: customerRecord.totalAmount,
-              tmcAmount: "-",
-              diff: customerRecord.totalAmount.toFixed(2),
-              customerRow: customerRecord.rowNumbers.join(","),
-              tmcRow: "-"
+              type: "TMC有客户无",
+              ticketNo: displayTicketNo,
+              customerAmount: "-",
+              tmcAmount,
+              diff: (-tmcAmount).toFixed(2),
+              customerRow: "-",
+              tmcRow: index + 2
             });
-          }
-        });
-
-        // TMC出票有但客户账单没有
-        tmcRows.forEach((row, index) => {
-          const ticketNo = row[tmcTicketNoColIndex]?.toString().trim();
-          const tmcAmount = parseFloat(row[tmcAmountColIndex]) || 0;
-          const flightDate = formatDate(row[tmcFlightDateColIndex]);
-
-          if (!ticketNo) return;
-          if (matchedTmcIssueTickets.has(ticketNo)) return;
-
-          // 拼接票号和乘机日
-          const displayTicketNo = flightDate ? `${ticketNo}（起飞时间：${flightDate}）` : ticketNo;
-
-          compareResult.value.push({
-            category: "出票",
-            type: "TMC有客户无",
-            ticketNo: displayTicketNo,
-            customerAmount: "-",
-            tmcAmount,
-            diff: (-tmcAmount).toFixed(2),
-            customerRow: "-",
-            tmcRow: index + 2
           });
-        });
+        }
       }
-    }
 
-    // ========== 改签对比 ==========
-    if (tmcChangeData.value) {
-      const tmcChangeHeaders = tmcChangeData.value.headers;
-      const tmcChangeRows = tmcChangeData.value.data;
+      // ========== 改签对比 ==========
+      if (tmcChangeData.value) {
+        const tmcChangeHeaders = tmcChangeData.value.headers;
+        const tmcChangeRows = tmcChangeData.value.data;
 
-      // 找到TMC改签的列索引
-      const tmcChangeTicketNoColIndex = tmcChangeHeaders.findIndex(
-        h => h && h.toString().includes("票号")
-      );
-      // 客户改签费用
-      const tmcCustomerChangeFeeColIndex = tmcChangeHeaders.findIndex(
-        h => h && h.toString().includes("客户改签费用")
-      );
+        // 找到TMC改签的列索引
+        const tmcChangeTicketNoColIndex = tmcChangeHeaders.findIndex(
+          h => h && h.toString().includes("票号")
+        );
+        // 客户改签费用
+        const tmcCustomerChangeFeeColIndex = tmcChangeHeaders.findIndex(
+          h => h && h.toString().includes("客户改签费用")
+        );
 
-      console.log("=== TMC改签列索引 ===");
-      console.log("票号 列索引:", tmcChangeTicketNoColIndex);
-      console.log("客户改签费用 列索引:", tmcCustomerChangeFeeColIndex);
+        console.log("=== TMC改签列索引 ===");
+        console.log("票号 列索引:", tmcChangeTicketNoColIndex);
+        console.log("客户改签费用 列索引:", tmcCustomerChangeFeeColIndex);
 
-      if (tmcChangeTicketNoColIndex === -1) {
-        ElMessage.warning("TMC改签未找到'票号'列");
-      } else if (tmcCustomerChangeFeeColIndex === -1) {
-        ElMessage.warning("TMC改签未找到'客户改签费用'列");
-      } else {
-        // 票号处理函数：用 "-" 分割后取最后一项
-        const getTicketNoKey = (ticketNo: string) => {
-          const trimmed = ticketNo?.toString().trim();
-          if (!trimmed) return "";
-          const parts = trimmed.split("-");
-          return parts[parts.length - 1] || trimmed;
-        };
+        if (tmcChangeTicketNoColIndex === -1) {
+          ElMessage.warning("TMC改签未找到'票号'列");
+        } else if (tmcCustomerChangeFeeColIndex === -1) {
+          ElMessage.warning("TMC改签未找到'客户改签费用'列");
+        } else {
+          // 票号处理函数：用 "-" 分割后取最后一项
+          const getTicketNoKey = (ticketNo: string) => {
+            const trimmed = ticketNo?.toString().trim();
+            if (!trimmed) return "";
+            const parts = trimmed.split("-");
+            return parts[parts.length - 1] || trimmed;
+          };
 
-        // 构建TMC改签数据映射
-        const tmcChangeMap = new Map<string, { row: any[]; customerChangeFee: number; originalTicketNo: string }>();
-        tmcChangeRows.forEach(row => {
-          const originalTicketNo = row[tmcChangeTicketNoColIndex]?.toString().trim();
-          const ticketNoKey = getTicketNoKey(originalTicketNo);
-          const customerChangeFee = parseFloat(row[tmcCustomerChangeFeeColIndex]) || 0;
-          if (ticketNoKey) {
-            tmcChangeMap.set(ticketNoKey, { row, customerChangeFee, originalTicketNo });
-          }
-        });
+          // 构建TMC改签数据映射
+          const tmcChangeMap = new Map<
+            string,
+            { row: any[]; customerChangeFee: number; originalTicketNo: string }
+          >();
+          tmcChangeRows.forEach(row => {
+            const originalTicketNo = row[tmcChangeTicketNoColIndex]
+              ?.toString()
+              .trim();
+            const ticketNoKey = getTicketNoKey(originalTicketNo);
+            const customerChangeFee =
+              parseFloat(row[tmcCustomerChangeFeeColIndex]) || 0;
+            if (ticketNoKey) {
+              tmcChangeMap.set(ticketNoKey, {
+                row,
+                customerChangeFee,
+                originalTicketNo
+              });
+            }
+          });
 
-        const matchedTmcChangeTickets = new Set<string>();
+          const matchedTmcChangeTickets = new Set<string>();
 
-        // 遍历客户账单数据进行改签对比
-        flightRows.forEach((row, index) => {
-          const originalTicketNo = row[ticketNoColIndex]?.toString().trim();
-          const ticketNoKey = getTicketNoKey(originalTicketNo);
-          const changeFee = parseFloat(row[changeFeeColIndex]) || 0;
-          const settlementAmount = parseFloat(row[settlementColIndex]) || 0;
+          // 遍历客户账单数据进行改签对比
+          flightRows.forEach((row, index) => {
+            const originalTicketNo = row[ticketNoColIndex]?.toString().trim();
+            const ticketNoKey = getTicketNoKey(originalTicketNo);
+            const changeFee = parseFloat(row[changeFeeColIndex]) || 0;
+            const settlementAmount = parseFloat(row[settlementColIndex]) || 0;
 
-          // 改签手续费需要大于0
-          if (changeFee <= 0) return;
-          if (!ticketNoKey) return;
+            // 改签手续费需要大于0
+            if (changeFee <= 0) return;
+            if (!ticketNoKey) return;
 
-          const tmcRecord = tmcChangeMap.get(ticketNoKey);
+            const tmcRecord = tmcChangeMap.get(ticketNoKey);
 
-          if (tmcRecord) {
-            matchedTmcChangeTickets.add(ticketNoKey);
+            if (tmcRecord) {
+              matchedTmcChangeTickets.add(ticketNoKey);
 
-            // 对比结算金额与TMC客户改签费用
-            const tmcCustomerChangeFee = tmcRecord.customerChangeFee;
-            const diff = settlementAmount - tmcCustomerChangeFee;
-            if (Math.abs(diff) > 0.01) {
+              // 对比结算金额与TMC客户改签费用
+              const tmcCustomerChangeFee = tmcRecord.customerChangeFee;
+              const diff = settlementAmount - tmcCustomerChangeFee;
+              if (Math.abs(diff) > 0.01) {
+                compareResult.value.push({
+                  category: "改签",
+                  type: "金额不匹配",
+                  ticketNo: originalTicketNo,
+                  customerAmount: settlementAmount,
+                  tmcAmount: tmcCustomerChangeFee,
+                  diff: diff.toFixed(2),
+                  customerRow: index + 2,
+                  tmcRow: tmcChangeRows.indexOf(tmcRecord.row) + 2
+                });
+              }
+            } else {
+              // 客户有改签数据，TMC没有
               compareResult.value.push({
                 category: "改签",
-                type: "金额不匹配",
+                type: "客户有TMC无",
                 ticketNo: originalTicketNo,
                 customerAmount: settlementAmount,
-                tmcAmount: tmcCustomerChangeFee,
-                diff: diff.toFixed(2),
+                tmcAmount: "-",
+                diff: settlementAmount.toFixed(2),
                 customerRow: index + 2,
-                tmcRow: tmcChangeRows.indexOf(tmcRecord.row) + 2
+                tmcRow: "-"
               });
             }
-          } else {
-            // 客户有改签数据，TMC没有
+          });
+
+          // TMC改签有但客户账单没有
+          tmcChangeRows.forEach((row, index) => {
+            const originalTicketNo = row[tmcChangeTicketNoColIndex]
+              ?.toString()
+              .trim();
+            const ticketNoKey = getTicketNoKey(originalTicketNo);
+            const tmcCustomerChangeFee =
+              parseFloat(row[tmcCustomerChangeFeeColIndex]) || 0;
+
+            if (!ticketNoKey) return;
+            if (matchedTmcChangeTickets.has(ticketNoKey)) return;
+            if (tmcCustomerChangeFee <= 0) return;
+
             compareResult.value.push({
               category: "改签",
-              type: "客户有TMC无",
+              type: "TMC有客户无",
               ticketNo: originalTicketNo,
-              customerAmount: settlementAmount,
-              tmcAmount: "-",
-              diff: settlementAmount.toFixed(2),
-              customerRow: index + 2,
-              tmcRow: "-"
+              customerAmount: "-",
+              tmcAmount: tmcCustomerChangeFee,
+              diff: (-tmcCustomerChangeFee).toFixed(2),
+              customerRow: "-",
+              tmcRow: index + 2
             });
-          }
-        });
-
-        // TMC改签有但客户账单没有
-        tmcChangeRows.forEach((row, index) => {
-          const originalTicketNo = row[tmcChangeTicketNoColIndex]?.toString().trim();
-          const ticketNoKey = getTicketNoKey(originalTicketNo);
-          const tmcCustomerChangeFee = parseFloat(row[tmcCustomerChangeFeeColIndex]) || 0;
-
-          if (!ticketNoKey) return;
-          if (matchedTmcChangeTickets.has(ticketNoKey)) return;
-          if (tmcCustomerChangeFee <= 0) return;
-
-          compareResult.value.push({
-            category: "改签",
-            type: "TMC有客户无",
-            ticketNo: originalTicketNo,
-            customerAmount: "-",
-            tmcAmount: tmcCustomerChangeFee,
-            diff: (-tmcCustomerChangeFee).toFixed(2),
-            customerRow: "-",
-            tmcRow: index + 2
           });
-        });
+        }
       }
-    }
 
-    // ========== 退票对比 ==========
-    if (tmcRefundData.value) {
-      const tmcRefundHeaders = tmcRefundData.value.headers;
-      const tmcRefundRows = tmcRefundData.value.data;
+      // ========== 退票对比 ==========
+      if (tmcRefundData.value) {
+        const tmcRefundHeaders = tmcRefundData.value.headers;
+        const tmcRefundRows = tmcRefundData.value.data;
 
-      // 找到TMC退票的列索引
-      // N列是第14列，索引为13 - 票面_承运人-票号
-      const tmcRefundTicketNoColIndex = tmcRefundHeaders.findIndex(
-        h => h && h.toString().includes("票面_承运人-票号")
-      );
-      // AF列是第32列，索引为31 - 应退金额
-      const tmcRefundAmountColIndex = tmcRefundHeaders.findIndex(
-        h => h && h.toString().includes("应退金额")
-      );
+        // 找到TMC退票的列索引
+        // N列是第14列，索引为13 - 票面_承运人-票号
+        const tmcRefundTicketNoColIndex = tmcRefundHeaders.findIndex(
+          h => h && h.toString().includes("票面_承运人-票号")
+        );
+        // AF列是第32列，索引为31 - 应退金额
+        const tmcRefundAmountColIndex = tmcRefundHeaders.findIndex(
+          h => h && h.toString().includes("应退金额")
+        );
 
-      console.log("=== TMC退票列索引 ===");
-      console.log("票面_承运人-票号 列索引:", tmcRefundTicketNoColIndex);
-      console.log("应退金额 列索引:", tmcRefundAmountColIndex);
+        console.log("=== TMC退票列索引 ===");
+        console.log("票面_承运人-票号 列索引:", tmcRefundTicketNoColIndex);
+        console.log("应退金额 列索引:", tmcRefundAmountColIndex);
 
-      if (tmcRefundTicketNoColIndex === -1) {
-        ElMessage.warning("TMC退票未找到'票面_承运人-票号'列");
-      } else if (tmcRefundAmountColIndex === -1) {
-        ElMessage.warning("TMC退票未找到'应退金额'列");
-      } else {
-        // 构建TMC退票数据映射（按票号汇总金额）
-        const tmcRefundMap = new Map<string, { rows: any[]; totalAmount: number; rowNumbers: number[] }>();
-        tmcRefundRows.forEach((row, idx) => {
-          const ticketNo = row[tmcRefundTicketNoColIndex]?.toString().trim();
-          const amount = parseFloat(row[tmcRefundAmountColIndex]) || 0;
-          if (ticketNo) {
-            if (tmcRefundMap.has(ticketNo)) {
-              const existing = tmcRefundMap.get(ticketNo)!;
-              existing.rows.push(row);
-              existing.totalAmount += amount;
-              existing.rowNumbers.push(idx + 2);
-            } else {
-              tmcRefundMap.set(ticketNo, {
-                rows: [row],
-                totalAmount: amount,
-                rowNumbers: [idx + 2]
-              });
-            }
-          }
-        });
-
-        console.log("=== TMC退票汇总数据 ===");
-        tmcRefundMap.forEach((value, key) => {
-          console.log(`票号: ${key}, 汇总金额: ${value.totalAmount}, 行号: ${value.rowNumbers.join(",")}`);
-        });
-
-        // 构建客户账单退票数据映射（按票号汇总结算金额）
-        const customerRefundMap = new Map<string, { totalAmount: number; rowNumbers: number[] }>();
-        flightRows.forEach((row, index) => {
-          const ticketNo = row[ticketNoColIndex]?.toString().trim();
-          const refundFee = parseFloat(row[refundFeeColIndex]) || 0;
-          const settlementAmount = parseFloat(row[settlementColIndex]) || 0;
-
-          // 退票手续费需要大于0
-          if (refundFee <= 0) return;
-          if (!ticketNo) return;
-
-          const absSettlement = Math.abs(settlementAmount);
-          if (customerRefundMap.has(ticketNo)) {
-            const existing = customerRefundMap.get(ticketNo)!;
-            existing.totalAmount += absSettlement;
-            existing.rowNumbers.push(index + 2);
-          } else {
-            customerRefundMap.set(ticketNo, {
-              totalAmount: absSettlement,
-              rowNumbers: [index + 2]
-            });
-          }
-        });
-
-        const matchedTmcRefundTickets = new Set<string>();
-
-        // 遍历客户账单汇总数据进行退票对比
-        customerRefundMap.forEach((customerRecord, ticketNo) => {
-          const tmcRecord = tmcRefundMap.get(ticketNo);
-
-          if (tmcRecord) {
-            matchedTmcRefundTickets.add(ticketNo);
-            const diff = customerRecord.totalAmount - tmcRecord.totalAmount;
-
-            if (Math.abs(diff) > 0.01) {
-              compareResult.value.push({
-                category: "退票",
-                type: "金额不匹配",
-                ticketNo,
-                customerAmount: customerRecord.totalAmount,
-                tmcAmount: tmcRecord.totalAmount,
-                diff: diff.toFixed(2),
-                customerRow: customerRecord.rowNumbers.join(","),
-                tmcRow: tmcRecord.rowNumbers.join(",")
-              });
-            }
-          } else {
-            compareResult.value.push({
-              category: "退票",
-              type: "客户有TMC无",
-              ticketNo,
-              customerAmount: customerRecord.totalAmount,
-              tmcAmount: "-",
-              diff: customerRecord.totalAmount.toFixed(2),
-              customerRow: customerRecord.rowNumbers.join(","),
-              tmcRow: "-"
-            });
-          }
-        });
-
-        // TMC退票有但客户账单没有（使用汇总后的数据，需要二次校验）
-        tmcRefundMap.forEach((record, ticketNo) => {
-          if (matchedTmcRefundTickets.has(ticketNo)) return;
-          if (record.totalAmount <= 0) return;
-
-          // 二次校验：在客户原始数据中查找该票号的所有记录
-          // W列是第23列，索引为22 - TMC服务费
-          const tmcServiceFeeColIndex = 22;
-          let matchedCustomerRow: number | null = null;
-
-          flightRows.forEach((row, idx) => {
-            const customerTicketNo = row[ticketNoColIndex]?.toString().trim();
-            if (customerTicketNo === ticketNo) {
-              const settlementAmount = parseFloat(row[settlementColIndex]) || 0;
-              // 只处理正数结算金额
-              if (settlementAmount > 0) {
-                const tmcServiceFee = parseFloat(row[tmcServiceFeeColIndex]) || 0;
-                // 正数结算金额 - W列TMC服务费
-                const adjustedAmount = settlementAmount - tmcServiceFee;
-
-                // 如果处理后的金额等于TMC应退金额，则匹配成功
-                if (Math.abs(adjustedAmount - record.totalAmount) <= 0.01) {
-                  matchedCustomerRow = idx + 2;
-                  console.log(`退票二次校验匹配成功: ${ticketNo}, TMC金额: ${record.totalAmount}, 客户结算金额: ${settlementAmount}, TMC服务费: ${tmcServiceFee}, 处理后金额: ${adjustedAmount}`);
-                }
+        if (tmcRefundTicketNoColIndex === -1) {
+          ElMessage.warning("TMC退票未找到'票面_承运人-票号'列");
+        } else if (tmcRefundAmountColIndex === -1) {
+          ElMessage.warning("TMC退票未找到'应退金额'列");
+        } else {
+          // 构建TMC退票数据映射（按票号汇总金额）
+          const tmcRefundMap = new Map<
+            string,
+            { rows: any[]; totalAmount: number; rowNumbers: number[] }
+          >();
+          tmcRefundRows.forEach((row, idx) => {
+            const ticketNo = row[tmcRefundTicketNoColIndex]?.toString().trim();
+            const amount = parseFloat(row[tmcRefundAmountColIndex]) || 0;
+            if (ticketNo) {
+              if (tmcRefundMap.has(ticketNo)) {
+                const existing = tmcRefundMap.get(ticketNo)!;
+                existing.rows.push(row);
+                existing.totalAmount += amount;
+                existing.rowNumbers.push(idx + 2);
+              } else {
+                tmcRefundMap.set(ticketNo, {
+                  rows: [row],
+                  totalAmount: amount,
+                  rowNumbers: [idx + 2]
+                });
               }
             }
           });
 
-          // 如果二次校验匹配成功，不算差异
-          if (matchedCustomerRow !== null) {
-            return;
-          }
-
-          compareResult.value.push({
-            category: "退票",
-            type: "TMC有客户无",
-            ticketNo,
-            customerAmount: "-",
-            tmcAmount: record.totalAmount,
-            diff: (-record.totalAmount).toFixed(2),
-            customerRow: "-",
-            tmcRow: record.rowNumbers.join(",")
+          console.log("=== TMC退票汇总数据 ===");
+          tmcRefundMap.forEach((value, key) => {
+            console.log(
+              `票号: ${key}, 汇总金额: ${value.totalAmount}, 行号: ${value.rowNumbers.join(",")}`
+            );
           });
-        });
+
+          // 构建客户账单退票数据映射（按票号汇总结算金额）
+          const customerRefundMap = new Map<
+            string,
+            { totalAmount: number; rowNumbers: number[] }
+          >();
+          flightRows.forEach((row, index) => {
+            const ticketNo = row[ticketNoColIndex]?.toString().trim();
+            const refundFee = parseFloat(row[refundFeeColIndex]) || 0;
+            const settlementAmount = parseFloat(row[settlementColIndex]) || 0;
+
+            // 退票手续费需要大于0
+            if (refundFee <= 0) return;
+            if (!ticketNo) return;
+
+            const absSettlement = Math.abs(settlementAmount);
+            if (customerRefundMap.has(ticketNo)) {
+              const existing = customerRefundMap.get(ticketNo)!;
+              existing.totalAmount += absSettlement;
+              existing.rowNumbers.push(index + 2);
+            } else {
+              customerRefundMap.set(ticketNo, {
+                totalAmount: absSettlement,
+                rowNumbers: [index + 2]
+              });
+            }
+          });
+
+          const matchedTmcRefundTickets = new Set<string>();
+
+          // 遍历客户账单汇总数据进行退票对比
+          customerRefundMap.forEach((customerRecord, ticketNo) => {
+            const tmcRecord = tmcRefundMap.get(ticketNo);
+
+            if (tmcRecord) {
+              matchedTmcRefundTickets.add(ticketNo);
+              const diff = customerRecord.totalAmount - tmcRecord.totalAmount;
+
+              if (Math.abs(diff) > 0.01) {
+                compareResult.value.push({
+                  category: "退票",
+                  type: "金额不匹配",
+                  ticketNo,
+                  customerAmount: customerRecord.totalAmount,
+                  tmcAmount: tmcRecord.totalAmount,
+                  diff: diff.toFixed(2),
+                  customerRow: customerRecord.rowNumbers.join(","),
+                  tmcRow: tmcRecord.rowNumbers.join(",")
+                });
+              }
+            } else {
+              compareResult.value.push({
+                category: "退票",
+                type: "客户有TMC无",
+                ticketNo,
+                customerAmount: customerRecord.totalAmount,
+                tmcAmount: "-",
+                diff: customerRecord.totalAmount.toFixed(2),
+                customerRow: customerRecord.rowNumbers.join(","),
+                tmcRow: "-"
+              });
+            }
+          });
+
+          // TMC退票有但客户账单没有（使用汇总后的数据，需要二次校验）
+          tmcRefundMap.forEach((record, ticketNo) => {
+            if (matchedTmcRefundTickets.has(ticketNo)) return;
+            if (record.totalAmount <= 0) return;
+
+            // 二次校验：在客户原始数据中查找该票号的所有记录
+            // W列是第23列，索引为22 - TMC服务费
+            const tmcServiceFeeColIndex = 22;
+            let matchedCustomerRow: number | null = null;
+
+            flightRows.forEach((row, idx) => {
+              const customerTicketNo = row[ticketNoColIndex]?.toString().trim();
+              if (customerTicketNo === ticketNo) {
+                const settlementAmount =
+                  parseFloat(row[settlementColIndex]) || 0;
+                // 只处理正数结算金额
+                if (settlementAmount > 0) {
+                  const tmcServiceFee =
+                    parseFloat(row[tmcServiceFeeColIndex]) || 0;
+                  // 正数结算金额 - W列TMC服务费
+                  const adjustedAmount = settlementAmount - tmcServiceFee;
+
+                  // 如果处理后的金额等于TMC应退金额，则匹配成功
+                  if (Math.abs(adjustedAmount - record.totalAmount) <= 0.01) {
+                    matchedCustomerRow = idx + 2;
+                    console.log(
+                      `退票二次校验匹配成功: ${ticketNo}, TMC金额: ${record.totalAmount}, 客户结算金额: ${settlementAmount}, TMC服务费: ${tmcServiceFee}, 处理后金额: ${adjustedAmount}`
+                    );
+                  }
+                }
+              }
+            });
+
+            // 如果二次校验匹配成功，不算差异
+            if (matchedCustomerRow !== null) {
+              return;
+            }
+
+            compareResult.value.push({
+              category: "退票",
+              type: "TMC有客户无",
+              ticketNo,
+              customerAmount: "-",
+              tmcAmount: record.totalAmount,
+              diff: (-record.totalAmount).toFixed(2),
+              customerRow: "-",
+              tmcRow: record.rowNumbers.join(",")
+            });
+          });
+        }
       }
-    }
     } // 结束 if (hasFlightCompare)
 
     // ========== 酒店对比 ==========
@@ -843,155 +885,179 @@ const compareData = () => {
       const tmcHotelHeaders = hotelBillData.value.headers;
       const tmcHotelRows = hotelBillData.value.data;
 
+      // 按表头名称全等匹配查找列索引
+      const findColIndex = (headers: any[], name: string) =>
+        headers.findIndex(h => h && h.toString().trim() === name);
+
       // 客户账单酒店工作表列索引
-      // H列是第8列，索引为7 - 供应订单编号
-      const customerOrderNoColIndex = 7;
-      // Y列是第25列，索引为24 - 结算金额
-      const customerSettlementColIndex = 24;
+      const customerOrderNoColIndex = findColIndex(
+        hotelHeaders,
+        "供应订单编号"
+      );
+      const customerSettlementColIndex = findColIndex(hotelHeaders, "结算金额");
+      const guestNameColIndex = findColIndex(hotelHeaders, "入住人");
 
       // TMC酒店账单列索引
-      // P列是第16列，索引为15 - 订单编号
-      const tmcOrderNoColIndex = 15;
-      // AG列是第33列，索引为32 - 应付金额
-      const tmcAmountColIndex = 32;
+      const tmcOrderNoColIndex = findColIndex(tmcHotelHeaders, "订单编号");
+      const tmcAmountColIndex = findColIndex(tmcHotelHeaders, "应付金额");
 
       console.log("=== 酒店对比列索引 ===");
-      console.log("客户账单-供应订单编号 列索引 (H列):", customerOrderNoColIndex);
-      console.log("客户账单-结算金额 列索引 (Y列):", customerSettlementColIndex);
-      console.log("TMC酒店-订单编号 列索引 (P列):", tmcOrderNoColIndex);
-      console.log("TMC酒店-应付金额 列索引 (AG列):", tmcAmountColIndex);
+      console.log("客户账单-供应订单编号 列索引:", customerOrderNoColIndex);
+      console.log("客户账单-结算金额 列索引:", customerSettlementColIndex);
+      console.log("客户账单-入住人 列索引:", guestNameColIndex);
+      console.log("TMC酒店-订单编号 列索引:", tmcOrderNoColIndex);
+      console.log("TMC酒店-应付金额 列索引:", tmcAmountColIndex);
 
-      // M列是第13列，索引为12 - 入住人
-      const guestNameColIndex = 12;
+      if (customerOrderNoColIndex === -1) {
+        ElMessage.warning("客户账单酒店未找到'供应订单编号'列");
+      } else if (customerSettlementColIndex === -1) {
+        ElMessage.warning("客户账单酒店未找到'结算金额'列");
+      } else if (tmcOrderNoColIndex === -1) {
+        ElMessage.warning("TMC酒店账单未找到'订单编号'列");
+      } else if (tmcAmountColIndex === -1) {
+        ElMessage.warning("TMC酒店账单未找到'应付金额'列");
+      } else {
+        // 构建客户账单酒店数据映射（按供应订单编号汇总结算金额）
+        const customerHotelMap = new Map<
+          string,
+          { totalAmount: number; rowNumbers: number[]; guestNames: string[] }
+        >();
+        hotelRows.forEach((row, index) => {
+          const orderNo = row[customerOrderNoColIndex]?.toString().trim();
+          const settlementAmount =
+            parseFloat(row[customerSettlementColIndex]) || 0;
+          const guestName = row[guestNameColIndex]?.toString().trim() || "";
 
-      // 构建客户账单酒店数据映射（按供应订单编号汇总结算金额）
-      const customerHotelMap = new Map<string, { totalAmount: number; rowNumbers: number[]; guestNames: string[] }>();
-      hotelRows.forEach((row, index) => {
-        const orderNo = row[customerOrderNoColIndex]?.toString().trim();
-        const settlementAmount = parseFloat(row[customerSettlementColIndex]) || 0;
-        const guestName = row[guestNameColIndex]?.toString().trim() || "";
+          if (!orderNo) return;
 
-        if (!orderNo) return;
-
-        if (customerHotelMap.has(orderNo)) {
-          const existing = customerHotelMap.get(orderNo)!;
-          existing.totalAmount += settlementAmount;
-          existing.rowNumbers.push(index + 2);
-          if (guestName && !existing.guestNames.includes(guestName)) {
-            existing.guestNames.push(guestName);
-          }
-        } else {
-          customerHotelMap.set(orderNo, {
-            totalAmount: settlementAmount,
-            rowNumbers: [index + 2],
-            guestNames: guestName ? [guestName] : []
-          });
-        }
-      });
-
-      // 移除汇总金额为0的记录
-      customerHotelMap.forEach((value, key) => {
-        if (Math.abs(value.totalAmount) < 0.01) {
-          customerHotelMap.delete(key);
-        }
-      });
-
-      console.log("=== 客户账单酒店汇总数据 ===");
-      customerHotelMap.forEach((value, key) => {
-        console.log(`订单号: ${key}, 汇总金额: ${value.totalAmount}, 行号: ${value.rowNumbers.join(",")}`);
-      });
-
-      // 构建TMC酒店数据映射（按订单编号汇总应付金额，金额为0的不加入）
-      const tmcHotelMap = new Map<string, { rows: any[]; totalAmount: number; rowNumbers: number[] }>();
-      tmcHotelRows.forEach((row, idx) => {
-        const orderNo = row[tmcOrderNoColIndex]?.toString().trim();
-        const amount = parseFloat(row[tmcAmountColIndex]) || 0;
-        if (orderNo) {
-          if (tmcHotelMap.has(orderNo)) {
-            const existing = tmcHotelMap.get(orderNo)!;
-            existing.rows.push(row);
-            existing.totalAmount += amount;
-            existing.rowNumbers.push(idx + 2);
+          if (customerHotelMap.has(orderNo)) {
+            const existing = customerHotelMap.get(orderNo)!;
+            existing.totalAmount += settlementAmount;
+            existing.rowNumbers.push(index + 2);
+            if (guestName && !existing.guestNames.includes(guestName)) {
+              existing.guestNames.push(guestName);
+            }
           } else {
-            tmcHotelMap.set(orderNo, {
-              rows: [row],
-              totalAmount: amount,
-              rowNumbers: [idx + 2]
+            customerHotelMap.set(orderNo, {
+              totalAmount: settlementAmount,
+              rowNumbers: [index + 2],
+              guestNames: guestName ? [guestName] : []
             });
           }
-        }
-      });
+        });
 
-      // 移除汇总金额为0的记录
-      tmcHotelMap.forEach((value, key) => {
-        if (Math.abs(value.totalAmount) < 0.01) {
-          tmcHotelMap.delete(key);
-        }
-      });
+        // 移除汇总金额为0的记录
+        customerHotelMap.forEach((value, key) => {
+          if (Math.abs(value.totalAmount) < 0.01) {
+            customerHotelMap.delete(key);
+          }
+        });
 
-      console.log("=== TMC酒店汇总数据 ===");
-      tmcHotelMap.forEach((value, key) => {
-        console.log(`订单号: ${key}, 汇总金额: ${value.totalAmount}, 行号: ${value.rowNumbers.join(",")}`);
-      });
+        console.log("=== 客户账单酒店汇总数据 ===");
+        customerHotelMap.forEach((value, key) => {
+          console.log(
+            `订单号: ${key}, 汇总金额: ${value.totalAmount}, 行号: ${value.rowNumbers.join(",")}`
+          );
+        });
 
-      const matchedTmcHotelOrders = new Set<string>();
+        // 构建TMC酒店数据映射（按订单编号汇总应付金额，金额为0的不加入）
+        const tmcHotelMap = new Map<
+          string,
+          { rows: any[]; totalAmount: number; rowNumbers: number[] }
+        >();
+        tmcHotelRows.forEach((row, idx) => {
+          const orderNo = row[tmcOrderNoColIndex]?.toString().trim();
+          const amount = parseFloat(row[tmcAmountColIndex]) || 0;
+          if (orderNo) {
+            if (tmcHotelMap.has(orderNo)) {
+              const existing = tmcHotelMap.get(orderNo)!;
+              existing.rows.push(row);
+              existing.totalAmount += amount;
+              existing.rowNumbers.push(idx + 2);
+            } else {
+              tmcHotelMap.set(orderNo, {
+                rows: [row],
+                totalAmount: amount,
+                rowNumbers: [idx + 2]
+              });
+            }
+          }
+        });
 
-      // 遍历客户账单汇总数据进行酒店对比
-      customerHotelMap.forEach((customerRecord, orderNo) => {
-        const tmcRecord = tmcHotelMap.get(orderNo);
+        // 移除汇总金额为0的记录
+        tmcHotelMap.forEach((value, key) => {
+          if (Math.abs(value.totalAmount) < 0.01) {
+            tmcHotelMap.delete(key);
+          }
+        });
 
-        if (tmcRecord) {
-          matchedTmcHotelOrders.add(orderNo);
-          const tmcAmount = tmcRecord.totalAmount;
-          const diff = customerRecord.totalAmount - tmcAmount;
+        console.log("=== TMC酒店汇总数据 ===");
+        tmcHotelMap.forEach((value, key) => {
+          console.log(
+            `订单号: ${key}, 汇总金额: ${value.totalAmount}, 行号: ${value.rowNumbers.join(",")}`
+          );
+        });
 
-          if (Math.abs(diff) > 0.01) {
+        const matchedTmcHotelOrders = new Set<string>();
+
+        // 遍历客户账单汇总数据进行酒店对比
+        customerHotelMap.forEach((customerRecord, orderNo) => {
+          const tmcRecord = tmcHotelMap.get(orderNo);
+
+          if (tmcRecord) {
+            matchedTmcHotelOrders.add(orderNo);
+            const tmcAmount = tmcRecord.totalAmount;
+            const diff = customerRecord.totalAmount - tmcAmount;
+
+            if (Math.abs(diff) > 0.01) {
+              compareResult.value.push({
+                category: "酒店",
+                type: "金额不匹配",
+                ticketNo: orderNo,
+                customerAmount: customerRecord.totalAmount,
+                tmcAmount,
+                diff: diff.toFixed(2),
+                customerRow: customerRecord.rowNumbers.join(","),
+                tmcRow: tmcRecord.rowNumbers.join(",")
+              });
+            }
+          } else {
+            // 拼接订单号和入住人
+            const guestNames = customerRecord.guestNames;
+            const displayOrderNo =
+              guestNames.length > 0
+                ? `${orderNo}（入住人：${guestNames.join(",")}）`
+                : orderNo;
+
             compareResult.value.push({
               category: "酒店",
-              type: "金额不匹配",
-              ticketNo: orderNo,
+              type: "客户有TMC无",
+              ticketNo: displayOrderNo,
               customerAmount: customerRecord.totalAmount,
-              tmcAmount,
-              diff: diff.toFixed(2),
+              tmcAmount: "-",
+              diff: customerRecord.totalAmount.toFixed(2),
               customerRow: customerRecord.rowNumbers.join(","),
-              tmcRow: tmcRecord.rowNumbers.join(",")
+              tmcRow: "-"
             });
           }
-        } else {
-          // 拼接订单号和入住人
-          const guestNames = customerRecord.guestNames;
-          const displayOrderNo = guestNames.length > 0 
-            ? `${orderNo}（入住人：${guestNames.join(",")}）` 
-            : orderNo;
+        });
+
+        // TMC酒店有但客户账单没有（使用汇总后的数据）
+        tmcHotelMap.forEach((record, orderNo) => {
+          if (matchedTmcHotelOrders.has(orderNo)) return;
 
           compareResult.value.push({
             category: "酒店",
-            type: "客户有TMC无",
-            ticketNo: displayOrderNo,
-            customerAmount: customerRecord.totalAmount,
-            tmcAmount: "-",
-            diff: customerRecord.totalAmount.toFixed(2),
-            customerRow: customerRecord.rowNumbers.join(","),
-            tmcRow: "-"
+            type: "TMC有客户无",
+            ticketNo: orderNo,
+            customerAmount: "-",
+            tmcAmount: record.totalAmount,
+            diff: (-record.totalAmount).toFixed(2),
+            customerRow: "-",
+            tmcRow: record.rowNumbers.join(",")
           });
-        }
-      });
-
-      // TMC酒店有但客户账单没有（使用汇总后的数据）
-      tmcHotelMap.forEach((record, orderNo) => {
-        if (matchedTmcHotelOrders.has(orderNo)) return;
-
-        compareResult.value.push({
-          category: "酒店",
-          type: "TMC有客户无",
-          ticketNo: orderNo,
-          customerAmount: "-",
-          tmcAmount: record.totalAmount,
-          diff: (-record.totalAmount).toFixed(2),
-          customerRow: "-",
-          tmcRow: record.rowNumbers.join(",")
         });
-      });
+      }
     }
 
     console.log("=== 对比结果 ===");
@@ -1089,7 +1155,7 @@ const resetAll = () => {
       <el-card class="upload-card">
         <template #header>
           <div class="card-header">
-            <span>客户账单</span>
+            <span>客户账单(广东坚朗五金制品股份有限公司)</span>
             <el-button
               v-if="customerBillFile"
               type="danger"
@@ -1186,7 +1252,7 @@ const resetAll = () => {
       <el-card class="upload-card">
         <template #header>
           <div class="card-header">
-            <span>酒店账单</span>
+            <span>酒店账单(差旅管家XXX汇总消费单)</span>
             <el-button
               v-if="hotelBillFile"
               type="danger"
@@ -1236,7 +1302,14 @@ const resetAll = () => {
         type="primary"
         size="large"
         :loading="comparing"
-        :disabled="!flightData && !hotelData && (!tmcIssueData && !tmcChangeData && !tmcRefundData) && !hotelBillData"
+        :disabled="
+          !flightData &&
+          !hotelData &&
+          !tmcIssueData &&
+          !tmcChangeData &&
+          !tmcRefundData &&
+          !hotelBillData
+        "
         @click="compareData"
       >
         {{ comparing ? "对比中..." : "开始对比" }}
@@ -1245,7 +1318,10 @@ const resetAll = () => {
     </div>
 
     <!-- 加载状态 -->
-    <div v-if="customerBillLoading || tmcLoading || hotelBillLoading" class="loading-container">
+    <div
+      v-if="customerBillLoading || tmcLoading || hotelBillLoading"
+      class="loading-container"
+    >
       <el-icon class="is-loading" :size="40">
         <i class="el-icon-loading" />
       </el-icon>
