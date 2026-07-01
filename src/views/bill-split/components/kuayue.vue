@@ -686,14 +686,51 @@ const handleCompareNewFileChange = async (uploadFile: any) => {
     try {
       const hotelResult = await readExcelFile(file, "酒店");
 
-      // 酒店名称在G列（索引6），公司支付金额在Q列（索引16），个人支付金额在R列（索引17）
-      const hotelNameIdx = 6; // G列
-      const companyPayIdx = 16; // Q列
-      const personalPayIdx = 17; // R列
+      // 在前5行中查找表头行（readExcelFile返回headers为第1行，data从第2行开始）
+      // 将headers和data前4行合并作为候选行
+      const candidateRows = [hotelResult.headers, ...hotelResult.data.slice(0, 4)];
+      const requiredCols = ["酒店名称", "公司支付金额", "个人支付金额"];
+      let headerRowIndex = -1;
+      for (let i = 0; i < candidateRows.length; i++) {
+        const row = candidateRows[i];
+        if (!row) continue;
+        const allMatch = requiredCols.every(
+          name => row.some(h => h && String(h).trim() === name)
+        );
+        if (allMatch) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+
+      if (headerRowIndex === -1) {
+        throw new Error("酒店工作表前5行未找到包含'酒店名称'、'公司支付金额'、'个人支付金额'的表头行");
+      }
+
+      const headers = candidateRows[headerRowIndex];
+      // 数据行：表头行之后的行（注意data是去掉第1行后的，需要换算索引）
+      // candidateRows[0] = 原第1行(headers)，candidateRows[i] = 原第i+1行
+      // 表头在第 headerRowIndex+1 行，数据从第 headerRowIndex+2 行开始
+      // 在hotelResult.data中的起始索引 = headerRowIndex（因为data[0]是原第2行）
+      const dataRows = hotelResult.data.slice(headerRowIndex);
+
+      // 按表头名称全等匹配查找列索引
+      const findHotelColIndex = (name: string) =>
+        headers.findIndex(h => h && String(h).trim() === name);
+
+      const hotelNameIdx = findHotelColIndex("酒店名称");
+      const companyPayIdx = findHotelColIndex("公司支付金额");
+      const personalPayIdx = findHotelColIndex("个人支付金额");
+
+      console.log("=== 新表酒店表头检测 ===");
+      console.log("表头所在行:", headerRowIndex + 1);
+      console.log("酒店名称列索引:", hotelNameIdx);
+      console.log("公司支付金额列索引:", companyPayIdx);
+      console.log("个人支付金额列索引:", personalPayIdx);
 
       // 按酒店名称汇总公司支付金额+个人支付金额
       const hotelSummary = new Map<string, number>();
-      for (const row of hotelResult.data) {
+      for (const row of dataRows) {
         const hotelName = String(row[hotelNameIdx] || "").trim();
         const companyPay = parseFloat(row[companyPayIdx]) || 0;
         const personalPay = parseFloat(row[personalPayIdx]) || 0;
@@ -705,8 +742,8 @@ const handleCompareNewFileChange = async (uploadFile: any) => {
       }
 
       compareNewHotelData.value = {
-        headers: hotelResult.headers,
-        data: hotelResult.data,
+        headers,
+        data: dataRows,
         summary: hotelSummary
       };
 
