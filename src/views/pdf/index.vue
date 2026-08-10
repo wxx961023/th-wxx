@@ -21,7 +21,6 @@ import {
 import type { UploadProps } from "element-plus";
 import {
   parsePDFFile,
-  printPDFContent,
   generateNewFileName,
   extractPDFsFromZip,
   createRenamedZip,
@@ -136,8 +135,8 @@ const handleFileChange: UploadProps["onChange"] = async uploadFile => {
 
         // 从 ZIP 中提取 PDF 文件
         const pdfFiles = await extractPDFsFromZip(file, {
-          onProgress: (_current, _total, message) => {
-            console.log(`[ZIP 解压] ${message}`);
+          onProgress: (_current, _total, _message) => {
+            // 进度回调，不再输出到控制台
           }
         });
 
@@ -159,7 +158,6 @@ const handleFileChange: UploadProps["onChange"] = async uploadFile => {
 
         ElMessage.success(`从 ${fileName} 中提取了 ${addedCount} 个 PDF 文件`);
       } catch (error) {
-        console.error("解压 ZIP 文件失败:", error);
         ElMessage.error(`解压失败: ${error.message}`);
       }
     } else {
@@ -180,56 +178,33 @@ const handleFileChange: UploadProps["onChange"] = async uploadFile => {
 
 // 解析单个PDF文件
 const parseFile = async (fileItem: FileParseItem): Promise<void> => {
-  const startTime = Date.now();
-  console.log(`\n开始解析文件: ${fileItem.fileName} (ID: ${fileItem.id})`);
-
   try {
     fileItem.status = "parsing";
     fileItem.progress = 10;
-
-    console.log(`[${fileItem.fileName}] 文件信息:`, {
-      size: `${(fileItem.file.size / 1024 / 1024).toFixed(2)}MB`,
-      type: fileItem.file.type,
-      lastModified: new Date(fileItem.file.lastModified).toISOString()
-    });
 
     fileItem.progress = 30;
 
     // 调用PDF解析工具
     const parsedContent = await parsePDFFile(fileItem.file, {
       includeSeparator: true,
-      debugMode: false, // 固定为 false
+      debugMode: false,
       onProgress: (current, total) => {
         const baseProgress = 30;
         const progressRange = 60; // 30% 到 90%
         const currentProgress = baseProgress + (current / total) * progressRange;
         fileItem.progress = Math.min(Math.floor(currentProgress), 90);
-        console.log(`[${fileItem.fileName}] 解析进度: ${current}/${total} 页 (${fileItem.progress}%)`);
       }
     });
 
     fileItem.progress = 90;
-    fileItem.parsedContent = parsedContent;
-
-    // 打印解析结果到控制台
-    printPDFContent(parsedContent, {
-      printFullText: true, // 打印完整文本
-      printPageText: true, // 打印每页的文本
-      maxPreviewLength: 500 // 预览长度
-    });
 
     // 生成新文件名
     const newFileName = generateNewFileName(parsedContent, fileItem.originalFileName);
     if (newFileName) {
       fileItem.newFileName = newFileName;
-      fileItem.fileName = newFileName; // 更新显示的文件名
+      fileItem.fileName = newFileName;
       fileItem.progress = 100;
       fileItem.status = "success";
-
-      const endTime = Date.now();
-      console.log(`[${fileItem.fileName}] 解析成功，总耗时: ${endTime - startTime}ms`);
-
-      ElMessage.success(`文件 "${fileItem.fileName}" 解析成功!`);
     } else {
       // 如果没有提取到姓名，标记为失败
       fileItem.newFileName = fileItem.originalFileName;
@@ -237,27 +212,20 @@ const parseFile = async (fileItem: FileParseItem): Promise<void> => {
       fileItem.status = "error";
       fileItem.errorMessage = "未提取到姓名信息";
       fileItem.progress = 0;
-      console.log(`未提取到姓名，标记为失败: ${fileItem.originalFileName}`);
       ElMessage.warning(`文件 "${fileItem.originalFileName}" 未提取到姓名信息`);
     }
-  } catch (error) {
-    const endTime = Date.now();
-    console.error(`[${fileItem.fileName}] 解析失败，耗时: ${endTime - startTime}ms`);
-    console.error(`[${fileItem.fileName}] 错误详情:`, {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    });
 
+    // 释放解析结果中的大文本数据，只保留必要信息，避免380+文件时内存累积
+    fileItem.parsedContent = undefined;
+  } catch (error) {
     fileItem.status = "error";
     fileItem.errorMessage = error instanceof Error ? error.message : "解析失败";
     fileItem.progress = 0;
-
     ElMessage.error(`文件 "${fileItem.fileName}" 解析失败: ${fileItem.errorMessage}`);
   }
 };
 
-// 解析所有文件
+// 解析所有文件 - 分批并发处理，避免一次性处理过多文件导致内存溢出
 const parseAllFiles = async () => {
   if (fileList.value.length === 0) {
     ElMessage.warning("请先选择PDF文件");
@@ -274,33 +242,18 @@ const parseAllFiles = async () => {
   isParsing.value = true;
 
   try {
-    console.log(`\n=== 开始批量解析 ${pendingFiles.length} 个文件 ===`);
-    const startTime = Date.now();
-
-    // 依次解析每个文件
-    for (let i = 0; i < pendingFiles.length; i++) {
-      const fileItem = pendingFiles[i];
-      console.log(`\n[${i + 1}/${pendingFiles.length}] 处理文件: ${fileItem.fileName}`);
-
-      await parseFile(fileItem);
-
-      // 等待一小段时间,让控制台输出有时间刷新
-      await new Promise(resolve => setTimeout(resolve, 100));
+    // 分批处理：每批 BATCH_SIZE 个文件并发执行
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < pendingFiles.length; i += BATCH_SIZE) {
+      const batch = pendingFiles.slice(i, i + BATCH_SIZE);
+      // 并发处理当前批次
+      await Promise.all(batch.map(fileItem => parseFile(fileItem)));
+      // 批次之间让出主线程，让 UI 有机会更新
+      await new Promise(resolve => setTimeout(resolve, 0));
     }
-
-    const endTime = Date.now();
-    const processingTime = endTime - startTime;
-    console.log(`\n=== 批量解析完成，总耗时: ${processingTime}ms ===`);
 
     const successCount = fileList.value.filter(item => item.status === "success").length;
     const errorCount = fileList.value.filter(item => item.status === "error").length;
-
-    console.log("解析结果统计:", {
-      success: successCount,
-      error: errorCount,
-      total: fileList.value.length,
-      processingTime: `${processingTime}ms`
-    });
 
     if (errorCount === 0) {
       ElMessage.success(`成功解析 ${successCount} 个文件`);
@@ -308,7 +261,6 @@ const parseAllFiles = async () => {
       ElMessage.warning(`解析完成：成功 ${successCount} 个，失败 ${errorCount} 个`);
     }
   } catch (error) {
-    console.error("批量解析过程中发生异常:", error);
     ElMessage.error("批量解析失败: " + (error.message || "未知错误"));
   } finally {
     isParsing.value = false;
@@ -378,26 +330,17 @@ const exportAllRenamedFiles = async () => {
     // 添加文件到 ZIP，保持原有目录结构
     for (const item of filesToExport) {
       if (item.zipPath) {
-        // 如果来自 ZIP，保持原有路径结构
-        // zipPath 格式如: "folder/subfolder/file.pdf"
-        // 我们需要提取目录路径，然后替换文件名为新文件名
         const pathParts = item.zipPath.split('/');
 
         if (pathParts.length > 1) {
-          // 有子目录，保持目录结构
           const dirPath = pathParts.slice(0, -1).join('/');
           const fullPath = `${dirPath}/${item.newFileName}`;
           zip.file(fullPath, item.file);
-          console.log(`导出文件: ${fullPath}`);
         } else {
-          // 根目录下的文件
           zip.file(item.newFileName!, item.file);
-          console.log(`导出文件: ${item.newFileName}`);
         }
       } else {
-        // 直接上传的 PDF 文件（不是来自 ZIP）
         zip.file(item.newFileName!, item.file);
-        console.log(`导出文件: ${item.newFileName}`);
       }
     }
 
@@ -413,7 +356,6 @@ const exportAllRenamedFiles = async () => {
     // 确定导出的 ZIP 文件名
     let exportFileName = "重命名文件.zip";
     if (sourceZipFileName.value) {
-      // 如果来自 ZIP，使用原 ZIP 文件名
       exportFileName = `${sourceZipFileName.value}.zip`;
     }
 
@@ -422,7 +364,6 @@ const exportAllRenamedFiles = async () => {
 
     ElMessage.success(`成功导出 ${filesToExport.length} 个文件(成功: ${successCount}, 失败: ${errorCount})`);
   } catch (error) {
-    console.error("导出失败:", error);
     ElMessage.error(`导出失败: ${error.message}`);
   }
 };
@@ -636,7 +577,7 @@ onUnmounted(() => {
               />
             </div>
 
-            <!-- 表格展示文件列表 -->
+            <!-- 表格展示文件列表 - 启用虚拟滚动以支持大量文件 -->
             <el-table
               :data="fileList"
               stripe
@@ -644,6 +585,7 @@ onUnmounted(() => {
               style="width: 100%"
               :height="tableHeight"
               :max-height="tableHeight"
+              virtual
             >
               <el-table-column type="index" label="序号" width="60" align="center" />
               <el-table-column prop="originalFileName" label="原始文件名" width="350">
