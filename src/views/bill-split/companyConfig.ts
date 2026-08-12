@@ -29,8 +29,8 @@ const companyConfig: CompanyConfig = {
   nameMapping: {
     深圳市宝辰鑫激光科技有限公司苏州分公司: {
       shortName: "宝辰鑫激光-苏州分公司",
-      contact: "王宛平",
-      phone: "15083407402"
+      contact: "钱敏洁",
+      phone: "13862558636"
     },
     深圳市宝辰鑫激光科技有限公司: {
       shortName: "宝辰鑫激光",
@@ -80,8 +80,8 @@ const companyConfig: CompanyConfig = {
     },
     鞍山创鑫激光技术有限公司: {
       shortName: "鞍山创鑫激光",
-      contact: "葛爽",
-      phone: "13998057875"
+      contact: "苏靖雯",
+      phone: "-"
     }
   },
 
