@@ -251,6 +251,7 @@ const expenseTypeRules = [
   { keywords: ["代订住宿费"], type: "住宿费" },
   { keywords: ["代订酒店费"], type: "酒店费" },
   { keywords: ["代订船票"], type: "船票" },
+  { keywords: ["代订房费"], type: "代订房费" },
   { keywords: ["服务费"], type: "服务费" }
 ];
 
