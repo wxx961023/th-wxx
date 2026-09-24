@@ -70,8 +70,8 @@ const companyConfig: CompanyConfig = {
     },
     苏州创鑫激光科技有限公司: {
       shortName: "苏州创鑫激光",
-      contact: "陈胜男",
-      phone: "15995761761"
+      contact: "杜紫若",
+      phone: "15290177167"
     },
     武汉创鑫激光科技有限公司: {
       shortName: "武汉创鑫激光",
